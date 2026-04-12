@@ -319,6 +319,15 @@
     }
     .dest-select:focus { outline: none; border-color: var(--accent); }
     .dest-select.empty { border-color: var(--red); }
+    .dest-select.dup   { border-color: var(--yellow); }
+
+    .dup-warn {
+      display: none;
+      font-size: 11px;
+      color: var(--yellow);
+      margin-top: 3px;
+    }
+    .dup-warn.show { display: block; }
 
     .cell-id   { font-family: monospace; font-size: 12px; color: var(--text-muted); }
     .cell-name { font-weight: 500; }
@@ -1085,6 +1094,7 @@ function renderEditTable(filter) {
         <select class="dest-select ${dest ? '' : 'empty'}" onchange="updateDest(${i},this.value)" id="ds-${i}">
           ${buildDestOptions(dest)}
         </select>
+        <div class="dup-warn" id="dw-${i}"></div>
       </td>
       <td class="row-status" id="rs-${i}">${dest ? '✅' : '⚠️'}</td>
     </tr>`;
@@ -1093,6 +1103,7 @@ function renderEditTable(filter) {
 
   document.getElementById('filter-count').textContent = `${rows.length} / ${usersData.length} 件表示`;
   updateEditStats();
+  refreshDuplicateWarnings();
 }
 
 function updateDest(i, val) {
@@ -1104,6 +1115,32 @@ function updateDest(i, val) {
   if (sel) sel.className = 'dest-select ' + (val ? '' : 'empty');
   if (stat) stat.textContent = val ? '✅' : '⚠️';
   updateEditStats();
+  refreshDuplicateWarnings();
+}
+
+function refreshDuplicateWarnings() {
+  // 各マッピング先の使用件数を集計
+  const counts = {};
+  usersData.forEach(row => {
+    const dest = row[COL_DEST];
+    if (dest) counts[dest] = (counts[dest] || 0) + 1;
+  });
+
+  // 全行の警告表示を更新（フィルタで非表示の行は getElementById が null になるためガード）
+  usersData.forEach((row, i) => {
+    const warnEl = document.getElementById('dw-' + i);
+    const selEl  = document.getElementById('ds-' + i);
+    if (!warnEl) return;
+    const dest = row[COL_DEST];
+    const isDup = dest && counts[dest] > 1;
+    warnEl.className = isDup ? 'dup-warn show' : 'dup-warn';
+    warnEl.textContent = isDup
+      ? 'すでに他の行でも選択されています。マッピングで不整合となりエラーとなる可能性があります'
+      : '';
+    if (selEl && dest) {
+      selEl.className = 'dest-select' + (isDup ? ' dup' : '');
+    }
+  });
 }
 
 function updateEditStats() {
