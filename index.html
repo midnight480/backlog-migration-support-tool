@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backlog 移行サポートツール — ユーザーマッピングエディタ</title>
+  <meta name="description" content="Backlog移行ツールのusers.csvをブラウザで簡単に編集。自動マッチング機能付き。">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <style>
+    /* ===== Design System ===== */
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #21262d;
+      --border:    #30363d;
+      --accent:    #2f81f7;
+      --accent-dim:#1f5eb8;
+      --green:     #3fb950;
+      --green-bg:  #0d2718;
+      --red:       #f85149;
+      --red-bg:    #2d0f0e;
+      --yellow:    #d29922;
+      --yellow-bg: #2b200a;
+      --text:      #e6edf3;
+      --text-muted:#8b949e;
+      --radius:    8px;
+      --radius-lg: 12px;
+      --shadow:    0 8px 32px rgba(0,0,0,.5);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ===== Header ===== */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header .logo {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--accent), #a371f7);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+    }
+    header h1 { font-size: 16px; font-weight: 600; }
+    header .subtitle { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+
+    /* ===== Main ===== */
+    main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+    /* ===== Privacy Notice ===== */
+    .privacy-notice {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    /* ===== Steps ===== */
+    .step-indicator {
+      display: flex;
+      gap: 0;
+      margin-bottom: 32px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .step-indicator .step {
+      flex: 1;
+      padding: 10px 16px;
+      font-size: 13px;
+      background: var(--surface);
+      color: var(--text-muted);
+      display: flex; align-items: center; gap: 8px;
+      border-right: 1px solid var(--border);
+      transition: background .2s;
+    }
+    .step-indicator .step:last-child { border-right: none; }
+    .step-indicator .step .num {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .step-indicator .step.active {
+      background: var(--surface2);
+      color: var(--text);
+    }
+    .step-indicator .step.active .num {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .step-indicator .step.done { color: var(--green); }
+    .step-indicator .step.done .num {
+      background: var(--green-bg);
+      border-color: var(--green);
+      color: var(--green);
+    }
+
+    /* ===== Card ===== */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow);
+    }
+    .card h2 {
+      font-size: 15px; font-weight: 600; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card h2 .tag {
+      font-size: 11px; font-weight: 500;
+      padding: 2px 8px; border-radius: 999px;
+      background: var(--surface2); color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    /* ===== Drop Zone ===== */
+    .drop-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 28px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(47,129,247,.06);
+    }
+    .drop-zone.loaded {
+      border-color: var(--green);
+      background: var(--green-bg);
+    }
+    .drop-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer;
+    }
+    .drop-zone .dz-icon { font-size: 28px; margin-bottom: 8px; }
+    .drop-zone .dz-label { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+    .drop-zone .dz-sub { font-size: 12px; color: var(--text-muted); }
+    .drop-zone .dz-filename {
+      margin-top: 8px; font-size: 12px;
+      color: var(--green); font-weight: 500;
+    }
+
+    /* ===== Buttons ===== */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: var(--radius);
+      font-size: 13px; font-weight: 500;
+      border: 1px solid transparent;
+      cursor: pointer; transition: all .15s;
+      text-decoration: none;
+    }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary {
+      background: var(--accent); color: #fff;
+      border-color: var(--accent);
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-dim); }
+    .btn-success {
+      background: var(--green-bg); color: var(--green);
+      border-color: var(--green);
+    }
+    .btn-success:hover:not(:disabled) { background: rgba(63,185,80,.15); }
+    .btn-danger {
+      background: var(--red-bg); color: var(--red);
+      border-color: var(--red);
+    }
+    .btn-danger:hover:not(:disabled) { background: rgba(248,81,73,.15); }
+    .btn-ghost {
+      background: transparent; color: var(--text-muted);
+      border-color: var(--border);
+    }
+    .btn-ghost:hover:not(:disabled) { color: var(--text); background: var(--surface2); }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+
+    /* ===== Match Dialog ===== */
+    .match-header {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+    }
+    .match-header .stats {
+      font-size: 13px; color: var(--text-muted);
+    }
+    .match-header .stats strong { color: var(--green); }
+
+    .match-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+    }
+    .match-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .match-table th {
+      background: var(--surface2);
+      padding: 10px 14px;
+      text-align: left; font-weight: 600; font-size: 12px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .match-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .match-table tr:last-child td { border-bottom: none; }
+    .match-table tr.accepted td { background: rgba(63,185,80,.05); }
+    .match-table tr.rejected td { background: rgba(248,81,73,.05); }
+    .match-table tr.pending td { background: transparent; }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    }
+    .badge-green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+    .badge-red   { background: var(--red-bg);   color: var(--red);   border: 1px solid var(--red); }
+    .badge-gray  { background: var(--surface2);  color: var(--text-muted); border: 1px solid var(--border); }
+
+    .confidence-bar {
+      display: inline-block;
+      width: 48px; height: 6px;
+      background: var(--border);
+      border-radius: 3px; overflow: hidden;
+      vertical-align: middle; margin-left: 4px;
+    }
+    .confidence-bar .fill {
+      height: 100%; background: var(--green); border-radius: 3px;
+    }
+
+    /* ===== Edit Table ===== */
+    .edit-toolbar {
+      display: flex; align-items: center;
+      gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .search-box {
+      padding: 7px 12px; border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface2); color: var(--text);
+      font-size: 13px; min-width: 220px;
+      transition: border-color .15s;
+    }
+    .search-box:focus { outline: none; border-color: var(--accent); }
+    .filter-select {
+      padding: 7px 12px; border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface2); color: var(--text);
+      font-size: 13px; cursor: pointer;
+    }
+    .filter-select:focus { outline: none; }
+
+    .edit-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .edit-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .edit-table th {
+      background: var(--surface2);
+      padding: 10px 14px;
+      text-align: left; font-weight: 600; font-size: 12px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap; position: sticky; top: 0;
+    }
+    .edit-table td {
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .edit-table tr:last-child td { border-bottom: none; }
+    .edit-table tr.row-empty td { background: rgba(248,81,73,.06); }
+    .edit-table tr.row-ok   td { background: rgba(63,185,80,.03); }
+
+    .dest-select {
+      width: 100%; padding: 5px 8px;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px; font-size: 13px; cursor: pointer;
+    }
+    .dest-select:focus { outline: none; border-color: var(--accent); }
+    .dest-select.empty { border-color: var(--red); }
+
+    .cell-id   { font-family: monospace; font-size: 12px; color: var(--text-muted); }
+    .cell-name { font-weight: 500; }
+    .cell-mail { font-size: 12px; color: var(--text-muted); }
+
+    .row-status { font-size: 16px; }
+
+    /* ===== Stats bar ===== */
+    .stats-bar {
+      display: flex; gap: 16px; font-size: 13px;
+      padding: 12px 16px;
+      background: var(--surface2);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .stats-bar .stat { display: flex; align-items: center; gap: 6px; }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .dot-green  { background: var(--green); }
+    .dot-red    { background: var(--red); }
+    .dot-yellow { background: var(--yellow); }
+
+    /* ===== Folder Picker ===== */
+    .folder-pick-area {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-lg);
+      padding: 36px 24px;
+      text-align: center;
+      transition: border-color .2s, background .2s;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+    .folder-pick-area:hover {
+      border-color: var(--accent);
+      background: rgba(47,129,247,.05);
+    }
+    .folder-pick-area.loaded {
+      border-color: var(--green);
+      background: var(--green-bg);
+      cursor: default;
+    }
+    .folder-pick-area .fpa-icon { font-size: 40px; margin-bottom: 8px; }
+    .folder-pick-area .fpa-label { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .folder-pick-area .fpa-sub { font-size: 13px; color: var(--text-muted); }
+    .folder-pick-area .fpa-path {
+      margin-top: 10px; font-size: 13px;
+      color: var(--green); font-family: monospace;
+    }
+
+    .file-status-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .file-status-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-size: 13px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .file-status-item .fsi-icon { font-size: 20px; flex-shrink: 0; }
+    .file-status-item .fsi-info { flex: 1; min-width: 0; }
+    .file-status-item .fsi-name { font-weight: 600; font-size: 13px; }
+    .file-status-item .fsi-detail { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .file-status-item.ok  { border-color: var(--green); }
+    .file-status-item.err { border-color: var(--red); }
+    .file-status-item.loading { border-color: var(--yellow); }
+
+    .log-file-list {
+      margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;
+    }
+    .log-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px; border-radius: 999px;
+      background: var(--surface2); border: 1px solid var(--border);
+      font-size: 12px; color: var(--text-muted);
+    }
+    .log-chip.ok { border-color: var(--green); color: var(--green); }
+
+    .api-warn {
+      background: var(--yellow-bg);
+      border: 1px solid var(--yellow);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--yellow);
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    /* ===== Section visibility ===== */
+    .section { display: none; }
+    .section.visible { display: block; }
+
+    /* ===== Toast ===== */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      font-size: 13px;
+      box-shadow: var(--shadow);
+      z-index: 999;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all .3s;
+      display: flex; align-items: center; gap: 8px;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    #toast.toast-ok   { border-color: var(--green); color: var(--green); }
+    #toast.toast-warn { border-color: var(--yellow); color: var(--yellow); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🔁</div>
+  <h1>Backlog 移行サポートツール</h1>
+  <span class="subtitle">ユーザーマッピングエディタ — データはブラウザ内でのみ処理されます</span>
+</header>
+
+<main>
+  <!-- Privacy -->
+  <div class="privacy-notice">
+    🔒 このツールはすべての処理をブラウザのメモリ内で完結します。CSVやログデータが外部サーバーに送信されることはありません。
+  </div>
+
+  <!-- Step Indicator -->
+  <div class="step-indicator">
+    <div class="step active" id="step1-indicator">
+      <div class="num">1</div> ファイル読み込み
+    </div>
+    <div class="step" id="step2-indicator">
+      <div class="num">2</div> 自動マッチング確認
+    </div>
+    <div class="step" id="step3-indicator">
+      <div class="num">3</div> 手動編集・保存
+    </div>
+  </div>
+
+  <!-- ===== STEP 1: ファイル読み込み ===== -->
+  <div class="section visible" id="section-load">
+    <div class="card">
+      <h2>📂 作業フォルダを選択 <span class="tag">STEP 1</span></h2>
+
+      <!-- API非対応ブラウザ向け警告 -->
+      <div class="api-warn" id="api-warn">
+        ⚠️ このブラウザはフォルダ選択 API（File System Access API）に対応していません。
+        Google Chrome または Microsoft Edge をお使いください。
+        または下部の「個別ファイルで読み込む」をお試しください。
+      </div>
+
+      <!-- フォルダ選択エリア -->
+      <div class="folder-pick-area" id="folder-pick-area" onclick="pickFolder()">
+        <div class="fpa-icon">📁</div>
+        <div class="fpa-label">作業フォルダをクリックして選択</div>
+        <div class="fpa-sub">
+          Backlog移行ツールを展開したフォルダ（例: backlog-migration-1.7.0/）を選択してください<br>
+          <code style="font-size:11px;color:var(--text-muted)">mapping/users.csv &nbsp; mapping/users_list.csv &nbsp; log/*.log</code>
+        </div>
+        <div class="fpa-path" id="folder-path"></div>
+      </div>
+
+      <!-- 読み込み状況 -->
+      <div class="file-status-grid" id="file-status-grid" style="display:none">
+        <div class="file-status-item" id="fsi-users">
+          <div class="fsi-icon">📋</div>
+          <div class="fsi-info">
+            <div class="fsi-name">mapping/users.csv</div>
+            <div class="fsi-detail" id="fsi-users-detail">待機中…</div>
+          </div>
+        </div>
+        <div class="file-status-item" id="fsi-list">
+          <div class="fsi-icon">👥</div>
+          <div class="fsi-info">
+            <div class="fsi-name">mapping/users_list.csv</div>
+            <div class="fsi-detail" id="fsi-list-detail">待機中…</div>
+          </div>
+        </div>
+        <div class="file-status-item" id="fsi-log" style="grid-column:1/-1">
+          <div class="fsi-icon">📄</div>
+          <div class="fsi-info">
+            <div class="fsi-name">log/ ディレクトリ</div>
+            <div class="fsi-detail" id="fsi-log-detail">待機中…</div>
+            <div class="log-file-list" id="log-file-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 個別ファイル読み込み（フォールバック） -->
+      <details style="margin-top:16px">
+        <summary style="font-size:13px;color:var(--text-muted);cursor:pointer;user-select:none">
+          個別ファイルで読み込む（フォルダ選択が使えない場合）
+        </summary>
+        <div style="margin-top:12px">
+          <div class="drop-grid">
+            <div class="drop-zone" id="dz-users"
+                 ondragover="dzDragOver(event,'dz-users')"
+                 ondragleave="dzDragLeave('dz-users')"
+                 ondrop="dzDrop(event,'users')">
+              <input type="file" accept=".csv" onchange="loadFile(event,'users')" id="file-users">
+              <div class="dz-icon">📋</div>
+              <div class="dz-label">users.csv</div>
+              <div class="dz-sub">mapping/ 内のファイル</div>
+              <div class="dz-filename" id="fn-users"></div>
+            </div>
+            <div class="drop-zone" id="dz-list"
+                 ondragover="dzDragOver(event,'dz-list')"
+                 ondragleave="dzDragLeave('dz-list')"
+                 ondrop="dzDrop(event,'list')">
+              <input type="file" accept=".csv" onchange="loadFile(event,'list')" id="file-list">
+              <div class="dz-icon">👥</div>
+              <div class="dz-label">users_list.csv</div>
+              <div class="dz-sub">mapping/ 内のファイル</div>
+              <div class="dz-filename" id="fn-list"></div>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-next1" disabled onclick="goToStep2()">
+          ▶ 自動マッチングへ
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="loadSample()">サンプルデータで試す</button>
+        <button class="btn btn-danger btn-sm" id="btn-clear" style="display:none;margin-left:auto" onclick="clearAll()">
+          🗑 読み込みデータをクリア
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== STEP 2: 自動マッチング確認 ===== -->
+  <div class="section" id="section-match">
+    <div class="card">
+      <h2>🔍 自動マッチング確認 <span class="tag">STEP 2</span></h2>
+
+      <div class="match-header">
+        <div class="stats" id="match-stats"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-success btn-sm" onclick="acceptAll()">✅ 全て承認</button>
+          <button class="btn btn-danger btn-sm" onclick="rejectAll()">✖ 全て拒否</button>
+        </div>
+      </div>
+
+      <div class="match-table-wrap">
+        <table class="match-table" id="match-table">
+          <thead>
+            <tr>
+              <th style="width:32px"></th>
+              <th>移行元 表示名</th>
+              <th>移行元 メール</th>
+              <th>→ 提案する移行先ユーザーID</th>
+              <th>一致根拠</th>
+              <th style="width:140px; text-align:center">判定</th>
+            </tr>
+          </thead>
+          <tbody id="match-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="applyMatchAndGoStep3()">▶ この内容で編集へ進む</button>
+        <button class="btn btn-ghost" onclick="goBack(1)">← 戻る</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== STEP 3: 手動編集 ===== -->
+  <div class="section" id="section-edit">
+    <div class="card">
+      <h2>✏️ 手動編集・保存 <span class="tag">STEP 3</span></h2>
+
+      <div class="stats-bar" id="edit-stats-bar"></div>
+
+      <div class="edit-toolbar">
+        <input class="search-box" id="search-box" placeholder="🔍 名前・メール・IDで絞り込み…" oninput="filterTable()">
+        <select class="filter-select" id="filter-select" onchange="filterTable()">
+          <option value="all">すべて表示</option>
+          <option value="empty">未設定のみ</option>
+          <option value="done">設定済みのみ</option>
+        </select>
+        <span id="filter-count" style="font-size:12px;color:var(--text-muted);margin-left:auto;"></span>
+      </div>
+
+      <div class="edit-table-wrap">
+        <table class="edit-table">
+          <thead>
+            <tr>
+              <th style="width:30px">#</th>
+              <th>移行元 ユーザーID</th>
+              <th>表示名</th>
+              <th>メールアドレス</th>
+              <th>移行先 ユーザーID（Destination）</th>
+              <th style="width:40px">状態</th>
+            </tr>
+          </thead>
+          <tbody id="edit-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-success" onclick="downloadCSV()">💾 users.csv をダウンロード</button>
+        <button class="btn btn-ghost" onclick="goBack(2)">← マッチング確認に戻る</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ===== State =====
+let usersData    = [];   // rows from users.csv
+let listData     = [];   // rows from users_list.csv
+let usersHeaders = [];
+let logFiles     = [];   // [{name, content}]
+let matchResults = [];
+
+const COL_ID    = 'Source Backlog user id';
+const COL_NAME  = 'Source Backlog user display name';
+const COL_EMAIL = 'Source Backlog user email';
+const COL_DEST  = 'Destination Backlog user name';
+
+// ===== Check API support =====
+if (!('showDirectoryPicker' in window)) {
+  document.getElementById('api-warn').style.display = 'block';
+}
+
+// ===== Folder Picker (File System Access API) =====
+async function pickFolder() {
+  if (!('showDirectoryPicker' in window)) return;
+  let dirHandle;
+  try {
+    dirHandle = await window.showDirectoryPicker({ mode: 'read' });
+  } catch (e) {
+    if (e.name !== 'AbortError') showToast('フォルダ選択がキャンセルされました', 'warn');
+    return;
+  }
+
+  const folderName = dirHandle.name;
+  document.getElementById('folder-path').textContent = '📂 ' + folderName;
+  document.getElementById('folder-pick-area').classList.add('loaded');
+  document.getElementById('folder-pick-area').onclick = null; // prevent re-open
+  document.getElementById('file-status-grid').style.display = 'grid';
+
+  // --- Load mapping/ ---
+  let mappingDir;
+  try {
+    mappingDir = await dirHandle.getDirectoryHandle('mapping');
+  } catch {
+    setFsiError('fsi-users', 'mapping/ フォルダが見つかりません');
+    setFsiError('fsi-list',  'mapping/ フォルダが見つかりません');
+  }
+
+  if (mappingDir) {
+    await loadCsvFromDir(mappingDir, 'users.csv',      'users');
+    await loadCsvFromDir(mappingDir, 'users_list.csv', 'list');
+  }
+
+  // --- Load log/ ---
+  let logDir;
+  try {
+    logDir = await dirHandle.getDirectoryHandle('log');
+  } catch {
+    setFsiInfo('fsi-log', 'fsi-log-detail', 'log/ フォルダが見つかりません（スキップ）', 'err');
+  }
+
+  if (logDir) {
+    logFiles = [];
+    const chips = [];
+    for await (const [name, handle] of logDir) {
+      if (handle.kind === 'file' && name.endsWith('.log')) {
+        const file    = await handle.getFile();
+        const content = await file.text();
+        logFiles.push({ name, content });
+        chips.push(`<span class="log-chip ok">📄 ${esc(name)}</span>`);
+      }
+    }
+    const detail = logFiles.length
+      ? `${logFiles.length} 件のログファイルを読み込みました`
+      : 'ログファイル（.log）が見つかりません';
+    setFsiInfo('fsi-log', 'fsi-log-detail', detail, logFiles.length ? 'ok' : 'err');
+    document.getElementById('log-file-list').innerHTML = chips.join('');
+  }
+
+  updateNextBtn();
+  showClearBtn();
+}
+
+async function loadCsvFromDir(dirHandle, filename, type) {
+  const fsiId     = type === 'users' ? 'fsi-users' : 'fsi-list';
+  const detailId  = fsiId + '-detail';
+  const fnId      = type === 'users' ? 'fn-users' : 'fn-list';
+  const dzId      = type === 'users' ? 'dz-users' : 'dz-list';
+
+  setFsiInfo(fsiId, detailId, '読み込み中…', 'loading');
+  try {
+    const fileHandle = await dirHandle.getFileHandle(filename);
+    const file = await fileHandle.getFile();
+    await new Promise((resolve, reject) => {
+      Papa.parse(file, {
+        header: true, skipEmptyLines: true,
+        complete(res) {
+          if (type === 'users') {
+            usersData    = res.data;
+            usersHeaders = res.meta.fields;
+          } else {
+            listData = res.data;
+          }
+          const count = res.data.length;
+          setFsiInfo(fsiId, detailId, `✓ ${count} 行 読み込み完了`, 'ok');
+          // also update fallback UI
+          if (document.getElementById(fnId))
+            document.getElementById(fnId).textContent = '✓ ' + filename + '（' + count + '行）';
+          if (document.getElementById(dzId))
+            document.getElementById(dzId).classList.add('loaded');
+          resolve();
+        },
+        error(err) { reject(err); }
+      });
+    });
+  } catch (e) {
+    setFsiError(fsiId, `${filename} が見つかりません`);
+  }
+}
+
+function setFsiInfo(itemId, detailId, msg, state) {
+  const item = document.getElementById(itemId);
+  if (!item) return;
+  item.className = 'file-status-item ' + (state || '');
+  document.getElementById(detailId).textContent = msg;
+}
+function setFsiError(itemId, msg) {
+  setFsiInfo(itemId, itemId + '-detail', msg, 'err');
+}
+
+// ===== Drop Zone (fallback) =====
+function dzDragOver(e, id) {
+  e.preventDefault();
+  document.getElementById(id)?.classList.add('drag-over');
+}
+function dzDragLeave(id) {
+  document.getElementById(id)?.classList.remove('drag-over');
+}
+function dzDrop(e, type) {
+  e.preventDefault();
+  const id = type === 'users' ? 'dz-users' : 'dz-list';
+  document.getElementById(id)?.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) parseCSV(file, type);
+}
+function loadFile(e, type) {
+  const file = e.target.files[0];
+  if (file) parseCSV(file, type);
+}
+
+function parseCSV(file, type) {
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true,
+    complete(res) {
+      if (type === 'users') {
+        usersData    = res.data;
+        usersHeaders = res.meta.fields;
+        document.getElementById('fn-users').textContent = '✓ ' + file.name + '（' + res.data.length + '行）';
+        document.getElementById('dz-users')?.classList.add('loaded');
+      } else {
+        listData = res.data;
+        document.getElementById('fn-list').textContent = '✓ ' + file.name + '（' + res.data.length + '行）';
+        document.getElementById('dz-list')?.classList.add('loaded');
+      }
+      updateNextBtn();
+    }
+  });
+}
+
+function updateNextBtn() {
+  const ready = !!(usersData.length && listData.length);
+  document.getElementById('btn-next1').disabled = !ready;
+  if (ready) showClearBtn();
+}
+
+function showClearBtn() {
+  document.getElementById('btn-clear').style.display = 'inline-flex';
+}
+
+function clearAll() {
+  if (!confirm('読み込んだデータをすべてクリアしますか？\nフォルダの選択からやり直しになります。')) return;
+
+  // reset state
+  usersData    = [];
+  listData     = [];
+  logFiles     = [];
+  matchResults = [];
+  usersHeaders = [];
+
+  // reset folder picker
+  const fpa = document.getElementById('folder-pick-area');
+  fpa.classList.remove('loaded');
+  fpa.onclick = pickFolder;
+  document.getElementById('folder-path').textContent = '';
+  document.getElementById('file-status-grid').style.display = 'none';
+
+  // reset file status items
+  ['fsi-users','fsi-list','fsi-log'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'file-status-item';
+  });
+  ['fsi-users-detail','fsi-list-detail','fsi-log-detail'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '待機中…';
+  });
+  const logList = document.getElementById('log-file-list');
+  if (logList) logList.innerHTML = '';
+
+  // reset fallback drop zones
+  ['dz-users','dz-list'].forEach(id => {
+    document.getElementById(id)?.classList.remove('loaded');
+  });
+  ['fn-users','fn-list'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '';
+  });
+  // reset fallback file inputs
+  ['file-users','file-list'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+
+  // reset buttons
+  document.getElementById('btn-next1').disabled = true;
+  document.getElementById('btn-clear').style.display = 'none';
+
+  showToast('クリアしました', 'warn');
+}
+
+// ===== Sample Data =====
+function loadSample() {
+  usersData = [
+    { [COL_ID]: '柴尾　哲也', [COL_NAME]: '柴尾　哲也',              [COL_EMAIL]: '',                               [COL_DEST]: '' },
+    { [COL_ID]: 'etgonqvPAV', [COL_NAME]: '[JAWS-UG佐賀]柴尾哲也', [COL_EMAIL]: 'shibao.tetsuya@midnight480.com', [COL_DEST]: '' },
+    { [COL_ID]: '*s09FMa4O96',[COL_NAME]: 'Tetsuya Shibao',        [COL_EMAIL]: 'tetsuya.shibao@nulab.com',       [COL_DEST]: '' },
+    { [COL_ID]: 'しばお',      [COL_NAME]: 'しばお',                 [COL_EMAIL]: '',                               [COL_DEST]: '' },
+    { [COL_ID]: '*vdacPyDqxY',[COL_NAME]: '美鈴（杉山）',           [COL_EMAIL]: 'misuzu@cloversoft.jp',           [COL_DEST]: '' },
+    { [COL_ID]: '*p6j4yHPdrI',[COL_NAME]: 'Yuni Kawazoe',          [COL_EMAIL]: 'yuni.kawazoe@gmail.com',         [COL_DEST]: '' },
+  ];
+  usersHeaders = [COL_ID, COL_NAME, COL_EMAIL, COL_DEST];
+
+  listData = [
+    { Name: 'etgonqvPAV',  Email: 'shibao.tetsuya@midnight480.com' },
+    { Name: '*s09FMa4O96', Email: 'tetsuya.shibao@nulab.com' },
+    { Name: '*vdacPyDqxY', Email: 'misuzu@cloversoft.jp' },
+    { Name: '*p6j4yHPdrI', Email: 'yuni.kawazoe@gmail.com' },
+    { Name: '*CIIkSmsAze', Email: 'matsuo@forgevision.com' },
+    { Name: '*7Kd8ZLxzUJ', Email: 'king.kazu.no11@gmail.com' },
+  ];
+
+  document.getElementById('fn-users').textContent = '✓ users.csv（サンプル 6行）';
+  document.getElementById('dz-users').classList.add('loaded');
+  document.getElementById('fn-list').textContent = '✓ users_list.csv（サンプル 6件）';
+  document.getElementById('dz-list').classList.add('loaded');
+  updateNextBtn();
+  showToast('サンプルデータを読み込みました', 'ok');
+}
+
+// ===== Step Navigation =====
+function setStep(n) {
+  ['section-load','section-match','section-edit'].forEach((id, i) => {
+    document.getElementById(id).classList.toggle('visible', i + 1 === n);
+  });
+  ['step1-indicator','step2-indicator','step3-indicator'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.classList.remove('active','done');
+    if (i + 1 === n) el.classList.add('active');
+    else if (i + 1 < n) el.classList.add('done');
+  });
+}
+
+function goBack(to) { setStep(to); }
+
+// ===== STEP 2: Auto-Match =====
+function buildEmailMap() {
+  const map = {};
+  listData.forEach(row => {
+    if (row.Email) map[row.Email.trim().toLowerCase()] = row.Name;
+  });
+  return map;
+}
+
+function goToStep2() {
+  const emailMap = buildEmailMap();
+  matchResults = usersData.map((row, idx) => {
+    const srcEmail = (row[COL_EMAIL] || '').trim().toLowerCase();
+    const srcId    = (row[COL_ID] || '').trim();
+    let dstName = '';
+    let confidence = 0;
+    let reason = '';
+
+    // 1) Email exact match
+    if (srcEmail && emailMap[srcEmail]) {
+      dstName = emailMap[srcEmail];
+      confidence = 1.0;
+      reason = 'メール完全一致';
+    }
+    // 2) ID direct match in list
+    else if (srcId && listData.find(r => r.Name === srcId)) {
+      dstName = srcId;
+      confidence = 0.85;
+      reason = 'ID一致';
+    }
+
+    return { rowIdx: idx, srcEmail, dstName, confidence, reason, accepted: dstName ? null : 'no-match' };
+    // null = pending decision, 'no-match' = skip (no candidate)
+  });
+
+  renderMatchTable();
+  setStep(2);
+}
+
+function renderMatchTable() {
+  const tbody = document.getElementById('match-tbody');
+  const matches = matchResults.filter(m => m.accepted !== 'no-match');
+  const noMatch = matchResults.filter(m => m.accepted === 'no-match');
+
+  let html = '';
+  matchResults.forEach((m, i) => {
+    const row = usersData[m.rowIdx];
+    const name = esc(row[COL_NAME]);
+    const email = esc(row[COL_EMAIL] || '—');
+
+    if (m.accepted === 'no-match') {
+      html += `<tr class="pending" id="mr-${i}">
+        <td class="row-status">⬜</td>
+        <td class="cell-name">${name}</td>
+        <td class="cell-mail">${email}</td>
+        <td><span style="color:var(--text-muted);font-size:12px">候補なし — STEP 3 で手動設定</span></td>
+        <td>—</td>
+        <td style="text-align:center">
+          <span class="badge badge-gray">スキップ</span>
+        </td>
+      </tr>`;
+    } else {
+      const statusClass = m.accepted === true ? 'accepted' : m.accepted === false ? 'rejected' : 'pending';
+      const barW = Math.round(m.confidence * 100);
+      html += `<tr class="${statusClass}" id="mr-${i}">
+        <td class="row-status">${statusIcon(m.accepted)}</td>
+        <td class="cell-name">${name}</td>
+        <td class="cell-mail">${email}</td>
+        <td><code style="font-size:12px;color:var(--accent)">${esc(m.dstName)}</code></td>
+        <td>
+          <span style="font-size:12px">${esc(m.reason)}</span>
+          <span class="confidence-bar"><span class="fill" style="width:${barW}%"></span></span>
+        </td>
+        <td style="text-align:center">
+          <div style="display:flex;gap:6px;justify-content:center">
+            <button class="btn btn-success btn-sm" onclick="setMatch(${i},true)">✅</button>
+            <button class="btn btn-danger btn-sm"  onclick="setMatch(${i},false)">✖</button>
+          </div>
+        </td>
+      </tr>`;
+    }
+  });
+
+  tbody.innerHTML = html;
+  updateMatchStats();
+}
+
+function statusIcon(accepted) {
+  if (accepted === true)  return '✅';
+  if (accepted === false) return '✖';
+  return '⏳';
+}
+
+function setMatch(i, val) {
+  matchResults[i].accepted = val;
+  const tr = document.getElementById('mr-' + i);
+  tr.className = val ? 'accepted' : 'rejected';
+  tr.cells[0].textContent = statusIcon(val);
+  // swap button states
+  const btns = tr.querySelectorAll('button');
+  // re-render just this row for simplicity — re-render all
+  renderMatchTable();
+}
+
+function acceptAll() {
+  matchResults.forEach(m => { if (m.accepted !== 'no-match') m.accepted = true; });
+  renderMatchTable();
+  showToast('全てのマッチを承認しました', 'ok');
+}
+
+function rejectAll() {
+  matchResults.forEach(m => { if (m.accepted !== 'no-match') m.accepted = false; });
+  renderMatchTable();
+  showToast('全てのマッチを拒否しました', 'warn');
+}
+
+function updateMatchStats() {
+  const candidates = matchResults.filter(m => m.accepted !== 'no-match');
+  const accepted   = candidates.filter(m => m.accepted === true).length;
+  const rejected   = candidates.filter(m => m.accepted === false).length;
+  const pending    = candidates.filter(m => m.accepted === null).length;
+  const noMatch    = matchResults.filter(m => m.accepted === 'no-match').length;
+  document.getElementById('match-stats').innerHTML =
+    `全 ${matchResults.length} 件 ／ <strong>${candidates.length} 件に候補あり</strong>` +
+    ` ／ 承認: ${accepted} ／ 拒否: ${rejected}` +
+    (pending ? ` ／ <span style="color:var(--yellow)">未判定: ${pending}</span>` : '') +
+    (noMatch ? ` ／ 候補なし: ${noMatch}` : '');
+}
+
+// ===== STEP 3: Edit =====
+function applyMatchAndGoStep3() {
+  // Apply accepted matches into usersData
+  matchResults.forEach(m => {
+    if (m.accepted === true) {
+      usersData[m.rowIdx][COL_DEST] = m.dstName;
+    }
+  });
+  renderEditTable();
+  setStep(3);
+}
+
+// Build option list from listData
+function buildDestOptions(currentVal) {
+  let html = '<option value="">— 未設定 —</option>';
+  listData.forEach(row => {
+    const sel = row.Name === currentVal ? ' selected' : '';
+    html += `<option value="${esc(row.Name)}"${sel}>${esc(row.Name)}　${esc(row.Email)}</option>`;
+  });
+  return html;
+}
+
+function renderEditTable(filter) {
+  const tbody = document.getElementById('edit-tbody');
+  const q = (document.getElementById('search-box')?.value || '').toLowerCase();
+  const f = document.getElementById('filter-select')?.value || 'all';
+
+  let rows = usersData.map((row, i) => ({ row, i }));
+
+  // Filter
+  if (q) rows = rows.filter(({ row }) =>
+    [row[COL_ID], row[COL_NAME], row[COL_EMAIL], row[COL_DEST]]
+      .some(v => v && v.toLowerCase().includes(q))
+  );
+  if (f === 'empty') rows = rows.filter(({ row }) => !row[COL_DEST]);
+  if (f === 'done')  rows = rows.filter(({ row }) =>  row[COL_DEST]);
+
+  let html = '';
+  rows.forEach(({ row, i }) => {
+    const dest = row[COL_DEST] || '';
+    const cls  = dest ? 'row-ok' : 'row-empty';
+    html += `<tr class="${cls}" id="er-${i}">
+      <td style="color:var(--text-muted);font-size:12px">${i+1}</td>
+      <td class="cell-id">${esc(row[COL_ID])}</td>
+      <td class="cell-name">${esc(row[COL_NAME])}</td>
+      <td class="cell-mail">${esc(row[COL_EMAIL] || '—')}</td>
+      <td>
+        <select class="dest-select ${dest ? '' : 'empty'}" onchange="updateDest(${i},this.value)" id="ds-${i}">
+          ${buildDestOptions(dest)}
+        </select>
+      </td>
+      <td class="row-status" id="rs-${i}">${dest ? '✅' : '⚠️'}</td>
+    </tr>`;
+  });
+  tbody.innerHTML = html || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">該当する行がありません</td></tr>';
+
+  document.getElementById('filter-count').textContent = `${rows.length} / ${usersData.length} 件表示`;
+  updateEditStats();
+}
+
+function updateDest(i, val) {
+  usersData[i][COL_DEST] = val;
+  const tr = document.getElementById('er-' + i);
+  const sel = document.getElementById('ds-' + i);
+  const stat = document.getElementById('rs-' + i);
+  if (tr) tr.className = val ? 'row-ok' : 'row-empty';
+  if (sel) sel.className = 'dest-select ' + (val ? '' : 'empty');
+  if (stat) stat.textContent = val ? '✅' : '⚠️';
+  updateEditStats();
+}
+
+function updateEditStats() {
+  const done  = usersData.filter(r => r[COL_DEST]).length;
+  const empty = usersData.length - done;
+  document.getElementById('edit-stats-bar').innerHTML =
+    `<div class="stat"><div class="dot dot-green"></div> 設定済み: <strong>${done}</strong></div>` +
+    `<div class="stat"><div class="dot dot-red"></div> 未設定: <strong>${empty}</strong></div>` +
+    `<div class="stat"><div class="dot dot-yellow"></div> 全ユーザー: <strong>${usersData.length}</strong></div>`;
+}
+
+function filterTable() { renderEditTable(); }
+
+// ===== Download =====
+function downloadCSV() {
+  const csv = Papa.unparse(usersData, {
+    columns: usersHeaders,
+    quotes: true,
+    newline: '\r\n'
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'users.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('users.csv をダウンロードしました ✓', 'ok');
+}
+
+// ===== Utilities =====
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function showToast(msg, type = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show toast-' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 3000);
+}
+</script>
+</body>
+</html>
