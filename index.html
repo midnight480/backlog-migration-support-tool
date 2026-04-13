@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Backlog 移行サポートツール — ユーザーマッピングエディタ</title>
-  <meta name="description" content="Backlog移行ツールのusers.csvをブラウザで簡単に編集。自動マッチング機能付き。">
+  <title>Backlog Migration Support Tool</title>
+  <meta name="description" content="Backlog移行ツールのusers.csvをブラウザで簡単に編集。自動マッチング・ログZIPダウンロード・多言語対応。">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
     /* ===== Design System ===== */
     :root {
@@ -21,6 +22,8 @@
       --red-bg:    #2d0f0e;
       --yellow:    #d29922;
       --yellow-bg: #2b200a;
+      --purple:    #a371f7;
+      --purple-bg: #1e1436;
       --text:      #e6edf3;
       --text-muted:#8b949e;
       --radius:    8px;
@@ -42,13 +45,14 @@
     header {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 16px 24px;
+      padding: 12px 24px;
       display: flex;
       align-items: center;
       gap: 12px;
       position: sticky;
       top: 0;
       z-index: 100;
+      flex-wrap: wrap;
     }
     header .logo {
       width: 32px; height: 32px;
@@ -58,7 +62,32 @@
       font-size: 16px; flex-shrink: 0;
     }
     header h1 { font-size: 16px; font-weight: 600; }
-    header .subtitle { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+    header .subtitle { font-size: 12px; color: var(--text-muted); }
+
+    /* ===== Language Selector ===== */
+    .lang-switcher {
+      margin-left: auto;
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .lang-btn {
+      padding: 4px 10px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .lang-btn:hover { color: var(--text); background: var(--surface2); }
+    .lang-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
 
     /* ===== Main ===== */
     main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
@@ -205,6 +234,11 @@
       border-color: var(--border);
     }
     .btn-ghost:hover:not(:disabled) { color: var(--text); background: var(--surface2); }
+    .btn-purple {
+      background: var(--purple-bg); color: var(--purple);
+      border-color: var(--purple);
+    }
+    .btn-purple:hover:not(:disabled) { background: rgba(163,113,247,.15); }
     .btn-sm { padding: 4px 10px; font-size: 12px; }
     .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
 
@@ -424,6 +458,102 @@
       display: none;
     }
 
+    /* ===== Command Panel ===== */
+    .cmd-panel {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--purple);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .cmd-panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px; flex-wrap: wrap; gap: 8px;
+    }
+    .cmd-panel-title {
+      font-size: 13px; font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .os-badge {
+      font-size: 11px; padding: 2px 8px; border-radius: 999px;
+      background: var(--purple-bg); color: var(--purple);
+      border: 1px solid var(--purple);
+    }
+    .cmd-tabs {
+      display: flex; gap: 4px; margin-bottom: 10px;
+    }
+    .cmd-tab {
+      padding: 4px 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 12px; cursor: pointer;
+      transition: all .15s;
+    }
+    .cmd-tab:hover { color: var(--text); }
+    .cmd-tab.active {
+      background: var(--purple-bg);
+      border-color: var(--purple);
+      color: var(--purple);
+    }
+    .cmd-block {
+      position: relative;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 48px 12px 14px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 12px;
+      color: var(--green);
+      word-break: break-all;
+      line-height: 1.8;
+    }
+    .cmd-block .cmd-copy-btn {
+      position: absolute; top: 8px; right: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .cmd-block .cmd-copy-btn:hover { color: var(--text); border-color: var(--accent); }
+    .cmd-hint {
+      font-size: 11px; color: var(--text-muted); margin-top: 8px;
+      line-height: 1.6;
+    }
+
+    /* ===== ZIP Download ===== */
+    .zip-section {
+      display: none;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .zip-section.visible { display: block; }
+    .zip-desc {
+      font-size: 12px; color: var(--text-muted); margin-bottom: 10px;
+    }
+    .zip-checklist {
+      list-style: none;
+      margin-bottom: 12px;
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .zip-checklist li {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 4px 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .zip-checklist li.ready { border-color: var(--green); color: var(--green); }
+
     /* ===== Section visibility ===== */
     .section { display: none; }
     .section.visible { display: block; }
@@ -442,6 +572,7 @@
       opacity: 0;
       transition: all .3s;
       display: flex; align-items: center; gap: 8px;
+      max-width: 360px;
     }
     #toast.show { transform: translateY(0); opacity: 1; }
     #toast.toast-ok   { border-color: var(--green); color: var(--green); }
@@ -452,48 +583,49 @@
 
 <header>
   <div class="logo">🔁</div>
-  <h1>Backlog 移行サポートツール</h1>
-  <span class="subtitle">ユーザーマッピングエディタ — データはブラウザ内でのみ処理されます</span>
+  <h1 data-i18n="header_title">Backlog 移行サポートツール</h1>
+  <span class="subtitle" data-i18n="header_subtitle">ユーザーマッピングエディタ — データはブラウザ内でのみ処理されます</span>
+  <!-- Language Switcher -->
+  <div class="lang-switcher">
+    <button class="lang-btn active" id="lang-ja" onclick="setLang('ja')" title="日本語">🇯🇵 日本語</button>
+    <button class="lang-btn"        id="lang-en" onclick="setLang('en')" title="English">🇺🇸 English</button>
+    <button class="lang-btn"        id="lang-vi" onclick="setLang('vi')" title="Tiếng Việt">🇻🇳 Tiếng Việt</button>
+  </div>
 </header>
 
 <main>
   <!-- Privacy -->
   <div class="privacy-notice">
-    🔒 このツールはすべての処理をブラウザのメモリ内で完結します。CSVやログデータが外部サーバーに送信されることはありません。
+    🔒 <span data-i18n="privacy_notice"></span>
   </div>
 
   <!-- Step Indicator -->
   <div class="step-indicator">
     <div class="step active" id="step1-indicator">
-      <div class="num">1</div> ファイル読み込み
+      <div class="num">1</div> <span data-i18n="step1_label">ファイル読み込み</span>
     </div>
     <div class="step" id="step2-indicator">
-      <div class="num">2</div> 自動マッチング確認
+      <div class="num">2</div> <span data-i18n="step2_label">自動マッチング確認</span>
     </div>
     <div class="step" id="step3-indicator">
-      <div class="num">3</div> 手動編集・保存
+      <div class="num">3</div> <span data-i18n="step3_label">手動編集・保存</span>
     </div>
   </div>
 
   <!-- ===== STEP 1: ファイル読み込み ===== -->
   <div class="section visible" id="section-load">
     <div class="card">
-      <h2>📂 作業フォルダを選択 <span class="tag">STEP 1</span></h2>
+      <h2>📂 <span data-i18n="step1_title">作業フォルダを選択</span> <span class="tag">STEP 1</span></h2>
 
       <!-- API非対応ブラウザ向け警告 -->
-      <div class="api-warn" id="api-warn">
-        ⚠️ このブラウザはフォルダ選択 API（File System Access API）に対応していません。
-        Google Chrome または Microsoft Edge をお使いください。
-        または下部の「個別ファイルで読み込む」をお試しください。
-      </div>
+      <div class="api-warn" id="api-warn" data-i18n="api_warn"></div>
 
       <!-- フォルダ選択エリア -->
       <div class="folder-pick-area" id="folder-pick-area" onclick="pickFolder()">
         <div class="fpa-icon">📁</div>
-        <div class="fpa-label">作業フォルダをクリックして選択</div>
-        <div class="fpa-sub">
-          Backlog移行ツールを展開したフォルダ（例: backlog-migration-1.7.0/）を選択してください<br>
-          <code style="font-size:11px;color:var(--text-muted)">mapping/users.csv &nbsp; mapping/users_list.csv &nbsp; log/*.log</code>
+        <div class="fpa-label" data-i18n="fpa_label">作業フォルダをクリックして選択</div>
+        <div class="fpa-sub" data-i18n="fpa_sub">
+          Backlog移行ツールを展開したフォルダを選択してください
         </div>
         <div class="fpa-path" id="folder-path"></div>
       </div>
@@ -504,21 +636,21 @@
           <div class="fsi-icon">📋</div>
           <div class="fsi-info">
             <div class="fsi-name">mapping/users.csv</div>
-            <div class="fsi-detail" id="fsi-users-detail">待機中…</div>
+            <div class="fsi-detail" id="fsi-users-detail" data-i18n="status_waiting">待機中…</div>
           </div>
         </div>
         <div class="file-status-item" id="fsi-list">
           <div class="fsi-icon">👥</div>
           <div class="fsi-info">
             <div class="fsi-name">mapping/users_list.csv</div>
-            <div class="fsi-detail" id="fsi-list-detail">待機中…</div>
+            <div class="fsi-detail" id="fsi-list-detail" data-i18n="status_waiting">待機中…</div>
           </div>
         </div>
         <div class="file-status-item" id="fsi-log" style="grid-column:1/-1">
           <div class="fsi-icon">📄</div>
           <div class="fsi-info">
-            <div class="fsi-name">log/ ディレクトリ</div>
-            <div class="fsi-detail" id="fsi-log-detail">待機中…</div>
+            <div class="fsi-name" data-i18n="log_dir">log/ ディレクトリ</div>
+            <div class="fsi-detail" id="fsi-log-detail" data-i18n="status_waiting">待機中…</div>
             <div class="log-file-list" id="log-file-list"></div>
           </div>
         </div>
@@ -526,7 +658,7 @@
 
       <!-- 個別ファイル読み込み（フォールバック） -->
       <details style="margin-top:16px">
-        <summary style="font-size:13px;color:var(--text-muted);cursor:pointer;user-select:none">
+        <summary style="font-size:13px;color:var(--text-muted);cursor:pointer;user-select:none" data-i18n="fallback_summary">
           個別ファイルで読み込む（フォルダ選択が使えない場合）
         </summary>
         <div style="margin-top:12px">
@@ -538,7 +670,7 @@
               <input type="file" accept=".csv" onchange="loadFile(event,'users')" id="file-users">
               <div class="dz-icon">📋</div>
               <div class="dz-label">users.csv</div>
-              <div class="dz-sub">mapping/ 内のファイル</div>
+              <div class="dz-sub" data-i18n="dz_sub_mapping">mapping/ 内のファイル</div>
               <div class="dz-filename" id="fn-users"></div>
             </div>
             <div class="drop-zone" id="dz-list"
@@ -548,20 +680,46 @@
               <input type="file" accept=".csv" onchange="loadFile(event,'list')" id="file-list">
               <div class="dz-icon">👥</div>
               <div class="dz-label">users_list.csv</div>
-              <div class="dz-sub">mapping/ 内のファイル</div>
+              <div class="dz-sub" data-i18n="dz_sub_mapping">mapping/ 内のファイル</div>
               <div class="dz-filename" id="fn-list"></div>
             </div>
           </div>
         </div>
       </details>
 
+      <!-- コマンドサポートパネル -->
+      <div class="cmd-panel" id="cmd-panel" style="margin-top:20px">
+        <div class="cmd-panel-header">
+          <div class="cmd-panel-title">
+            💻 <span data-i18n="cmd_panel_title">実行コマンドサポート</span>
+            <span class="os-badge" id="os-badge">検出中…</span>
+          </div>
+          <span style="font-size:12px;color:var(--text-muted)" data-i18n="cmd_panel_hint_copy">コピーしてターミナルに貼り付けて実行</span>
+        </div>
+        <div class="cmd-tabs" id="cmd-tabs"></div>
+        <div id="cmd-blocks-container"></div>
+        <div class="cmd-hint" id="cmd-hint-text"></div>
+      </div>
+
       <div class="btn-row">
         <button class="btn btn-primary" id="btn-next1" disabled onclick="goToStep2()">
-          ▶ 自動マッチングへ
+          ▶ <span data-i18n="btn_next_match">自動マッチングへ</span>
         </button>
-        <button class="btn btn-ghost btn-sm" onclick="loadSample()">サンプルデータで試す</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadSample()" data-i18n="btn_sample">サンプルデータで試す</button>
         <button class="btn btn-danger btn-sm" id="btn-clear" style="display:none;margin-left:auto" onclick="clearAll()">
-          🗑 読み込みデータをクリア
+          🗑 <span data-i18n="btn_clear">読み込みデータをクリア</span>
+        </button>
+      </div>
+
+      <!-- ZIP ダウンロードセクション -->
+      <div class="zip-section" id="zip-section">
+        <div style="font-size:14px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+          📦 <span data-i18n="zip_section_title">ログをサポート向けにZIPで送る</span>
+        </div>
+        <div class="zip-desc" data-i18n="zip_desc">読み込んだログファイルと設定情報をZIPにまとめてダウンロードします。サポートへの問い合わせ時に添付してください。</div>
+        <ul class="zip-checklist" id="zip-checklist"></ul>
+        <button class="btn btn-purple" onclick="downloadLogZip()" id="btn-zip">
+          📦 <span data-i18n="btn_zip">ZIP でダウンロード</span>
         </button>
       </div>
     </div>
@@ -570,13 +728,13 @@
   <!-- ===== STEP 2: 自動マッチング確認 ===== -->
   <div class="section" id="section-match">
     <div class="card">
-      <h2>🔍 自動マッチング確認 <span class="tag">STEP 2</span></h2>
+      <h2>🔍 <span data-i18n="step2_title">自動マッチング確認</span> <span class="tag">STEP 2</span></h2>
 
       <div class="match-header">
         <div class="stats" id="match-stats"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-success btn-sm" onclick="acceptAll()">✅ 全て承認</button>
-          <button class="btn btn-danger btn-sm" onclick="rejectAll()">✖ 全て拒否</button>
+          <button class="btn btn-success btn-sm" onclick="acceptAll()">✅ <span data-i18n="btn_accept_all">全て承認</span></button>
+          <button class="btn btn-danger btn-sm" onclick="rejectAll()">✖ <span data-i18n="btn_reject_all">全て拒否</span></button>
         </div>
       </div>
 
@@ -585,11 +743,11 @@
           <thead>
             <tr>
               <th style="width:32px"></th>
-              <th>移行元 表示名</th>
-              <th>移行元 メール</th>
-              <th>→ 提案する移行先ユーザーID</th>
-              <th>一致根拠</th>
-              <th style="width:140px; text-align:center">判定</th>
+              <th data-i18n="th_src_name">移行元 表示名</th>
+              <th data-i18n="th_src_email">移行元 メール</th>
+              <th data-i18n="th_dst_id">→ 提案する移行先ユーザーID</th>
+              <th data-i18n="th_reason">一致根拠</th>
+              <th style="width:140px; text-align:center" data-i18n="th_decision">判定</th>
             </tr>
           </thead>
           <tbody id="match-tbody"></tbody>
@@ -597,8 +755,8 @@
       </div>
 
       <div class="btn-row">
-        <button class="btn btn-primary" onclick="applyMatchAndGoStep3()">▶ この内容で編集へ進む</button>
-        <button class="btn btn-ghost" onclick="goBack(1)">← 戻る</button>
+        <button class="btn btn-primary" onclick="applyMatchAndGoStep3()">▶ <span data-i18n="btn_go_edit">この内容で編集へ進む</span></button>
+        <button class="btn btn-ghost" onclick="goBack(1)">← <span data-i18n="btn_back">戻る</span></button>
       </div>
     </div>
   </div>
@@ -606,16 +764,16 @@
   <!-- ===== STEP 3: 手動編集 ===== -->
   <div class="section" id="section-edit">
     <div class="card">
-      <h2>✏️ 手動編集・保存 <span class="tag">STEP 3</span></h2>
+      <h2>✏️ <span data-i18n="step3_title">手動編集・保存</span> <span class="tag">STEP 3</span></h2>
 
       <div class="stats-bar" id="edit-stats-bar"></div>
 
       <div class="edit-toolbar">
-        <input class="search-box" id="search-box" placeholder="🔍 名前・メール・IDで絞り込み…" oninput="filterTable()">
+        <input class="search-box" id="search-box" placeholder="🔍" data-i18n-placeholder="search_placeholder" oninput="filterTable()">
         <select class="filter-select" id="filter-select" onchange="filterTable()">
-          <option value="all">すべて表示</option>
-          <option value="empty">未設定のみ</option>
-          <option value="done">設定済みのみ</option>
+          <option value="all" data-i18n="filter_all">すべて表示</option>
+          <option value="empty" data-i18n="filter_empty">未設定のみ</option>
+          <option value="done" data-i18n="filter_done">設定済みのみ</option>
         </select>
         <span id="filter-count" style="font-size:12px;color:var(--text-muted);margin-left:auto;"></span>
       </div>
@@ -625,11 +783,11 @@
           <thead>
             <tr>
               <th style="width:30px">#</th>
-              <th>移行元 ユーザーID</th>
-              <th>表示名</th>
-              <th>メールアドレス</th>
-              <th>移行先 ユーザーID（Destination）</th>
-              <th style="width:40px">状態</th>
+              <th data-i18n="th_src_id">移行元 ユーザーID</th>
+              <th data-i18n="th_src_name">移行元 表示名</th>
+              <th data-i18n="th_src_email">移行元 メール</th>
+              <th data-i18n="th_dst_id_edit">移行先 ユーザーID（Destination）</th>
+              <th style="width:40px" data-i18n="th_status">状態</th>
             </tr>
           </thead>
           <tbody id="edit-tbody"></tbody>
@@ -637,8 +795,8 @@
       </div>
 
       <div class="btn-row">
-        <button class="btn btn-success" onclick="downloadCSV()">💾 users.csv をダウンロード</button>
-        <button class="btn btn-ghost" onclick="goBack(2)">← マッチング確認に戻る</button>
+        <button class="btn btn-success" onclick="downloadCSV()">💾 <span data-i18n="btn_download_csv">users.csv をダウンロード</span></button>
+        <button class="btn btn-ghost" onclick="goBack(2)">← <span data-i18n="btn_back_match">マッチング確認に戻る</span></button>
       </div>
     </div>
   </div>
@@ -647,11 +805,442 @@
 <div id="toast"></div>
 
 <script>
-// ===== State =====
-let usersData    = [];   // rows from users.csv
-let listData     = [];   // rows from users_list.csv
+// ===================================================================
+// i18n Dictionary
+// ===================================================================
+const LANGS = {
+  ja: {
+    header_title:       'Backlog 移行サポートツール',
+    header_subtitle:    'ユーザーマッピングエディタ — データはブラウザ内でのみ処理されます',
+    privacy_notice:     'このツールはすべての処理をブラウザのメモリ内で完結します。CSVやログデータが外部サーバーに送信されることはありません。',
+    step1_label:        'ファイル読み込み',
+    step2_label:        '自動マッチング確認',
+    step3_label:        '手動編集・保存',
+    step1_title:        '作業フォルダを選択',
+    step2_title:        '自動マッチング確認',
+    step3_title:        '手動編集・保存',
+    api_warn:           '⚠️ このブラウザはフォルダ選択 API に対応していません。Google Chrome または Microsoft Edge をお使いください。または下部の「個別ファイルで読み込む」をお試しください。',
+    fpa_label:          '作業フォルダをクリックして選択',
+    fpa_sub:            'Backlog移行ツールを展開したフォルダ（例: backlog-migration-1.7.0/）を選択してください',
+    fallback_summary:   '個別ファイルで読み込む（フォルダ選択が使えない場合）',
+    dz_sub_mapping:     'mapping/ 内のファイル',
+    status_waiting:     '待機中…',
+    status_loading:     '読み込み中…',
+    status_ok:          (n) => `✓ ${n} 行 読み込み完了`,
+    status_not_found:   (f) => `${f} が見つかりません`,
+    mapping_not_found:  'mapping/ フォルダが見つかりません',
+    log_dir:            'log/ ディレクトリ',
+    log_loaded:         (n) => `${n} 件のログファイルを読み込みました`,
+    log_not_found:      'ログファイル（.log）が見つかりません',
+    log_dir_not_found:  'log/ フォルダが見つかりません（スキップ）',
+    cmd_panel_title:    '実行コマンドサポート',
+    cmd_panel_hint_copy:'コピーしてターミナルに貼り付けて実行',
+    cmd_hint_win:       'ヒント: Windowsキー + R → "cmd" と入力して Enterを押すとコマンドプロンプトが開きます。コマンドを貼り付けて実行してください。',
+    cmd_hint_mac:       'ヒント: Spotlight（⌘+Space）→ "Terminal" と入力して Enterを押すとターミナルが開きます。コマンドを貼り付けて実行してください。',
+    cmd_hint_linux:     'ヒント: ターミナルエミュレータを開き、コマンドを貼り付けて実行してください。',
+    cmd_copied:         'コマンドをコピーしました',
+    zip_section_title:  'ログをサポート向けにZIPで送る',
+    zip_desc:           '読み込んだログファイルと設定情報をZIPにまとめてダウンロードします。サポートへの問い合わせ時に添付してください。',
+    btn_zip:            'ZIP でダウンロード',
+    btn_next_match:     '自動マッチングへ',
+    btn_sample:         'サンプルデータで試す',
+    btn_clear:          '読み込みデータをクリア',
+    btn_accept_all:     '全て承認',
+    btn_reject_all:     '全て拒否',
+    btn_go_edit:        'この内容で編集へ進む',
+    btn_back:           '戻る',
+    btn_back_match:     'マッチング確認に戻る',
+    btn_download_csv:   'users.csv をダウンロード',
+    th_src_name:        '移行元 表示名',
+    th_src_email:       '移行元 メール',
+    th_dst_id:          '→ 提案する移行先ユーザーID',
+    th_reason:          '一致根拠',
+    th_decision:        '判定',
+    th_src_id:          '移行元 ユーザーID',
+    th_dst_id_edit:     '移行先 ユーザーID（Destination）',
+    th_status:          '状態',
+    filter_all:         'すべて表示',
+    filter_empty:       '未設定のみ',
+    filter_done:        '設定済みのみ',
+    search_placeholder: '🔍 名前・メール・IDで絞り込み…',
+    no_rows:            '該当する行がありません',
+    dest_unset:         '— 未設定 —',
+    no_candidate:       '候補なし — STEP 3 で手動設定',
+    skip_badge:         'スキップ',
+    match_stats:        (total, cand, accepted, rejected, pending, noMatch) =>
+      `全 ${total} 件 ／ <strong>${cand} 件に候補あり</strong>` +
+      ` ／ 承認: ${accepted} ／ 拒否: ${rejected}` +
+      (pending ? ` ／ <span style="color:var(--yellow)">未判定: ${pending}</span>` : '') +
+      (noMatch ? ` ／ 候補なし: ${noMatch}` : ''),
+    reason_email:       'メール完全一致',
+    reason_id:          'ID一致',
+    stats_done:         '設定済み',
+    stats_empty:        '未設定',
+    stats_total:        '全ユーザー',
+    display_count:      (n, total) => `${n} / ${total} 件表示`,
+    toast_cleared:      'クリアしました',
+    toast_sample:       'サンプルデータを読み込みました',
+    toast_accept_all:   '全てのマッチを承認しました',
+    toast_reject_all:   '全てのマッチを拒否しました',
+    toast_csv_saved:    'users.csv をダウンロードしました ✓',
+    toast_zip_saved:    'ZIPをダウンロードしました ✓',
+    toast_zip_error:    'ZIPの作成に失敗しました',
+    toast_folder_cancel:'フォルダ選択がキャンセルされました',
+    confirm_clear:      '読み込んだデータをすべてクリアしますか？\nフォルダの選択からやり直しになります。',
+    zip_item_logs:      (n) => `📄 ログファイル ${n} 件`,
+    zip_item_csv:       'users.csv（現在の編集内容）',
+    zip_item_info:      'support-info.txt',
+    zip_no_logs:        'ログを先に読み込んでください',
+    os_windows:         'Windows 検出',
+    os_mac:             'macOS 検出',
+    os_linux:           'Linux 検出',
+    os_unknown:         'OS 不明',
+  },
+  en: {
+    header_title:       'Backlog Migration Support Tool',
+    header_subtitle:    'User Mapping Editor — All processing done locally in your browser',
+    privacy_notice:     'All processing happens in your browser memory. No CSV or log data is sent to external servers.',
+    step1_label:        'Load Files',
+    step2_label:        'Auto-Matching',
+    step3_label:        'Edit & Save',
+    step1_title:        'Select Working Folder',
+    step2_title:        'Auto-Matching Review',
+    step3_title:        'Manual Edit & Save',
+    api_warn:           '⚠️ Your browser does not support the Folder Selection API. Please use Google Chrome or Microsoft Edge, or use the "Load individual files" option below.',
+    fpa_label:          'Click to select working folder',
+    fpa_sub:            'Select the folder where Backlog Migration Tool is extracted (e.g. backlog-migration-1.7.0/)',
+    fallback_summary:   'Load individual files (if folder selection is unavailable)',
+    dz_sub_mapping:     'File inside mapping/',
+    status_waiting:     'Waiting…',
+    status_loading:     'Loading…',
+    status_ok:          (n) => `✓ ${n} rows loaded`,
+    status_not_found:   (f) => `${f} not found`,
+    mapping_not_found:  'mapping/ folder not found',
+    log_dir:            'log/ directory',
+    log_loaded:         (n) => `${n} log file(s) loaded`,
+    log_not_found:      'No log files (.log) found',
+    log_dir_not_found:  'log/ folder not found (skipped)',
+    cmd_panel_title:    'Command Execution Support',
+    cmd_panel_hint_copy:'Copy and paste into your terminal',
+    cmd_hint_win:       'Tip: Press Win + R, type "cmd" and press Enter to open Command Prompt. Paste the command and run it.',
+    cmd_hint_mac:       'Tip: Press ⌘+Space, type "Terminal" and press Enter to open Terminal. Paste the command and run it.',
+    cmd_hint_linux:     'Tip: Open a terminal emulator, paste the command and run it.',
+    cmd_copied:         'Command copied!',
+    zip_section_title:  'Send Logs as ZIP to Support',
+    zip_desc:           'Bundle loaded log files and system info into a ZIP for download. Attach this when contacting support.',
+    btn_zip:            'Download as ZIP',
+    btn_next_match:     'Go to Auto-Matching',
+    btn_sample:         'Try with sample data',
+    btn_clear:          'Clear loaded data',
+    btn_accept_all:     'Accept All',
+    btn_reject_all:     'Reject All',
+    btn_go_edit:        'Proceed to Edit',
+    btn_back:           'Back',
+    btn_back_match:     'Back to Matching',
+    btn_download_csv:   'Download users.csv',
+    th_src_name:        'Source Display Name',
+    th_src_email:       'Source Email',
+    th_dst_id:          '→ Suggested Destination User ID',
+    th_reason:          'Match Reason',
+    th_decision:        'Decision',
+    th_src_id:          'Source User ID',
+    th_dst_id_edit:     'Destination User ID',
+    th_status:          'Status',
+    filter_all:         'Show all',
+    filter_empty:       'Unset only',
+    filter_done:        'Set only',
+    search_placeholder: '🔍 Filter by name, email, ID…',
+    no_rows:            'No matching rows',
+    dest_unset:         '— Not set —',
+    no_candidate:       'No candidate — Set manually in STEP 3',
+    skip_badge:         'Skip',
+    match_stats:        (total, cand, accepted, rejected, pending, noMatch) =>
+      `Total: ${total} ／ <strong>Candidates: ${cand}</strong>` +
+      ` ／ Accepted: ${accepted} ／ Rejected: ${rejected}` +
+      (pending ? ` ／ <span style="color:var(--yellow)">Pending: ${pending}</span>` : '') +
+      (noMatch ? ` ／ No candidate: ${noMatch}` : ''),
+    reason_email:       'Email exact match',
+    reason_id:          'ID match',
+    stats_done:         'Mapped',
+    stats_empty:        'Unmapped',
+    stats_total:        'Total Users',
+    display_count:      (n, total) => `${n} / ${total} rows`,
+    toast_cleared:      'Cleared',
+    toast_sample:       'Sample data loaded',
+    toast_accept_all:   'Accepted all matches',
+    toast_reject_all:   'Rejected all matches',
+    toast_csv_saved:    'users.csv downloaded ✓',
+    toast_zip_saved:    'ZIP downloaded ✓',
+    toast_zip_error:    'Failed to create ZIP',
+    toast_folder_cancel:'Folder selection cancelled',
+    confirm_clear:      'Clear all loaded data?\nYou will need to re-select the folder.',
+    zip_item_logs:      (n) => `📄 Log files: ${n}`,
+    zip_item_csv:       'users.csv (current edit)',
+    zip_item_info:      'support-info.txt',
+    zip_no_logs:        'Please load log files first',
+    os_windows:         'Windows detected',
+    os_mac:             'macOS detected',
+    os_linux:           'Linux detected',
+    os_unknown:         'OS unknown',
+  },
+  vi: {
+    header_title:       'Công Cụ Hỗ Trợ Di Chuyển Backlog',
+    header_subtitle:    'Công Cụ Chỉnh Sửa Ánh Xạ Người Dùng — Dữ liệu chỉ được xử lý trong trình duyệt',
+    privacy_notice:     'Tất cả quá trình xử lý diễn ra trong bộ nhớ của trình duyệt. Không có dữ liệu CSV hay log nào được gửi đến máy chủ bên ngoài.',
+    step1_label:        'Tải Tệp',
+    step2_label:        'Kiểm Tra Ghép Cặp',
+    step3_label:        'Chỉnh Sửa & Lưu',
+    step1_title:        'Chọn Thư Mục Làm Việc',
+    step2_title:        'Xem Xét Ghép Cặp Tự Động',
+    step3_title:        'Chỉnh Sửa Thủ Công & Lưu',
+    api_warn:           '⚠️ Trình duyệt của bạn không hỗ trợ API chọn thư mục. Vui lòng sử dụng Google Chrome hoặc Microsoft Edge, hoặc dùng tùy chọn "Tải từng tệp riêng lẻ" bên dưới.',
+    fpa_label:          'Nhấp để chọn thư mục làm việc',
+    fpa_sub:            'Chọn thư mục đã giải nén Backlog Migration Tool (ví dụ: backlog-migration-1.7.0/)',
+    fallback_summary:   'Tải từng tệp riêng lẻ (nếu không thể chọn thư mục)',
+    dz_sub_mapping:     'Tệp trong thư mục mapping/',
+    status_waiting:     'Đang chờ…',
+    status_loading:     'Đang tải…',
+    status_ok:          (n) => `✓ Đã tải ${n} dòng`,
+    status_not_found:   (f) => `Không tìm thấy ${f}`,
+    mapping_not_found:  'Không tìm thấy thư mục mapping/',
+    log_dir:            'Thư mục log/',
+    log_loaded:         (n) => `Đã tải ${n} tệp log`,
+    log_not_found:      'Không tìm thấy tệp log (.log)',
+    log_dir_not_found:  'Không tìm thấy thư mục log/ (bỏ qua)',
+    cmd_panel_title:    'Hỗ Trợ Thực Thi Lệnh',
+    cmd_panel_hint_copy:'Sao chép và dán vào terminal của bạn',
+    cmd_hint_win:       'Gợi ý: Nhấn Win + R, gõ "cmd" rồi Enter để mở Command Prompt. Dán lệnh vào và chạy.',
+    cmd_hint_mac:       'Gợi ý: Nhấn ⌘+Space, gõ "Terminal" rồi Enter để mở Terminal. Dán lệnh vào và chạy.',
+    cmd_hint_linux:     'Gợi ý: Mở terminal emulator, dán lệnh vào và chạy.',
+    cmd_copied:         'Đã sao chép lệnh!',
+    zip_section_title:  'Gửi Log Dưới Dạng ZIP Cho Bộ Phận Hỗ Trợ',
+    zip_desc:           'Đóng gói các tệp log đã tải và thông tin hệ thống thành ZIP để tải về. Đính kèm tệp này khi liên hệ với bộ phận hỗ trợ.',
+    btn_zip:            'Tải Về Dạng ZIP',
+    btn_next_match:     'Đến Ghép Cặp Tự Động',
+    btn_sample:         'Thử với dữ liệu mẫu',
+    btn_clear:          'Xóa dữ liệu đã tải',
+    btn_accept_all:     'Chấp Nhận Tất Cả',
+    btn_reject_all:     'Từ Chối Tất Cả',
+    btn_go_edit:        'Tiến Hành Chỉnh Sửa',
+    btn_back:           'Quay Lại',
+    btn_back_match:     'Quay Lại Ghép Cặp',
+    btn_download_csv:   'Tải Về users.csv',
+    th_src_name:        'Tên Hiển Thị Nguồn',
+    th_src_email:       'Email Nguồn',
+    th_dst_id:          '→ ID Người Dùng Đích Đề Xuất',
+    th_reason:          'Lý Do Khớp',
+    th_decision:        'Quyết Định',
+    th_src_id:          'ID Người Dùng Nguồn',
+    th_dst_id_edit:     'ID Người Dùng Đích (Destination)',
+    th_status:          'Trạng Thái',
+    filter_all:         'Hiển thị tất cả',
+    filter_empty:       'Chỉ chưa cài đặt',
+    filter_done:        'Chỉ đã cài đặt',
+    search_placeholder: '🔍 Lọc theo tên, email, ID…',
+    no_rows:            'Không có hàng phù hợp',
+    dest_unset:         '— Chưa đặt —',
+    no_candidate:       'Không có ứng viên — Đặt thủ công ở STEP 3',
+    skip_badge:         'Bỏ Qua',
+    match_stats:        (total, cand, accepted, rejected, pending, noMatch) =>
+      `Tổng: ${total} ／ <strong>Ứng viên: ${cand}</strong>` +
+      ` ／ Chấp nhận: ${accepted} ／ Từ chối: ${rejected}` +
+      (pending ? ` ／ <span style="color:var(--yellow)">Chờ xử lý: ${pending}</span>` : '') +
+      (noMatch ? ` ／ Không có ứng viên: ${noMatch}` : ''),
+    reason_email:       'Khớp email chính xác',
+    reason_id:          'Khớp ID',
+    stats_done:         'Đã Ánh Xạ',
+    stats_empty:        'Chưa Ánh Xạ',
+    stats_total:        'Tổng Người Dùng',
+    display_count:      (n, total) => `${n} / ${total} hàng`,
+    toast_cleared:      'Đã xóa',
+    toast_sample:       'Đã tải dữ liệu mẫu',
+    toast_accept_all:   'Đã chấp nhận tất cả',
+    toast_reject_all:   'Đã từ chối tất cả',
+    toast_csv_saved:    'Đã tải về users.csv ✓',
+    toast_zip_saved:    'Đã tải về ZIP ✓',
+    toast_zip_error:    'Không thể tạo ZIP',
+    toast_folder_cancel:'Đã hủy chọn thư mục',
+    confirm_clear:      'Xóa tất cả dữ liệu đã tải?\nBạn sẽ cần chọn lại thư mục.',
+    zip_item_logs:      (n) => `📄 Tệp log: ${n}`,
+    zip_item_csv:       'users.csv (chỉnh sửa hiện tại)',
+    zip_item_info:      'support-info.txt',
+    zip_no_logs:        'Vui lòng tải tệp log trước',
+    os_windows:         'Phát hiện Windows',
+    os_mac:             'Phát hiện macOS',
+    os_linux:           'Phát hiện Linux',
+    os_unknown:         'Không rõ HĐH',
+  }
+};
+
+// ===================================================================
+// Language State & Application
+// ===================================================================
+let currentLang = localStorage.getItem('bm_lang') || 'ja';
+
+function t(key, ...args) {
+  const dict = LANGS[currentLang] || LANGS.ja;
+  const val  = dict[key];
+  if (typeof val === 'function') return val(...args);
+  return val ?? key;
+}
+
+function applyLang() {
+  // Static text nodes
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = t(key);
+    if (typeof val === 'string') el.textContent = val;
+  });
+  // Placeholders
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+  });
+  // <html lang>
+  document.documentElement.lang = currentLang;
+  // <title>
+  document.title = t('header_title');
+  // Dynamic filter options
+  document.querySelectorAll('#filter-select option[data-i18n]').forEach(opt => {
+    opt.textContent = t(opt.getAttribute('data-i18n'));
+  });
+  // Update OS panel strings
+  renderCmdPanel();
+  // Update ZIP checklist if visible
+  if (document.getElementById('zip-section').classList.contains('visible')) {
+    renderZipChecklist();
+  }
+  // Re-render dynamic tables if already built
+  if (matchResults.length) updateMatchStats();
+  if (usersData.length && document.getElementById('section-edit').classList.contains('visible')) {
+    updateEditStats();
+    const cnt = document.getElementById('filter-count');
+    if (cnt && cnt.textContent) filterTable();
+  }
+  // Waiting status text
+  ['fsi-users-detail','fsi-list-detail','fsi-log-detail'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.getAttribute('data-status') === 'waiting') {
+      el.textContent = t('status_waiting');
+    }
+  });
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('bm_lang', lang);
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('lang-' + lang)?.classList.add('active');
+  applyLang();
+}
+
+// ===================================================================
+// OS Detection & Command Panel
+// ===================================================================
+function detectOS() {
+  const ua = navigator.userAgent || '';
+  const pl = navigator.platform  || '';
+  if (/Win/i.test(pl) || /Windows/i.test(ua)) return 'windows';
+  if (/Mac/i.test(pl) || /Macintosh/i.test(ua)) return 'mac';
+  if (/Linux/i.test(pl)) return 'linux';
+  return 'unknown';
+}
+
+const detectedOS = detectOS();
+
+const CMD_TEMPLATES = {
+  windows: {
+    tabs: ['PowerShell', 'cmd.exe'],
+    commands: [
+      `cd C:\\path\\to\\backlog-migration-1.7.0\r\njava -jar backlog-migration-*.jar migrate --help`,
+      `cd /d C:\\path\\to\\backlog-migration-1.7.0\r\njava -jar backlog-migration-*.jar migrate --help`,
+    ]
+  },
+  mac: {
+    tabs: ['zsh / bash'],
+    commands: [
+      `cd ~/path/to/backlog-migration-1.7.0\njava -jar backlog-migration-*.jar migrate --help`,
+    ]
+  },
+  linux: {
+    tabs: ['bash'],
+    commands: [
+      `cd ~/path/to/backlog-migration-1.7.0\njava -jar backlog-migration-*.jar migrate --help`,
+    ]
+  },
+  unknown: {
+    tabs: ['Shell'],
+    commands: [
+      `cd /path/to/backlog-migration-1.7.0\njava -jar backlog-migration-*.jar migrate --help`,
+    ]
+  }
+};
+
+let activeCmdTab = 0;
+
+function renderCmdPanel() {
+  const os     = detectedOS;
+  const tmpl   = CMD_TEMPLATES[os] || CMD_TEMPLATES.unknown;
+
+  // OS badge
+  const osBadge = document.getElementById('os-badge');
+  const osKey   = { windows: 'os_windows', mac: 'os_mac', linux: 'os_linux', unknown: 'os_unknown' }[os];
+  if (osBadge) osBadge.textContent = t(osKey);
+
+  // Tabs
+  const tabsEl = document.getElementById('cmd-tabs');
+  if (tabsEl) {
+    tabsEl.innerHTML = tmpl.tabs.map((label, i) =>
+      `<button class="cmd-tab ${i === activeCmdTab ? 'active' : ''}" onclick="switchCmdTab(${i})">${esc(label)}</button>`
+    ).join('');
+  }
+
+  // Command blocks
+  const container = document.getElementById('cmd-blocks-container');
+  if (container) {
+    container.innerHTML = `
+      <div class="cmd-block">
+        <pre style="white-space:pre-wrap;word-break:break-all">${esc(tmpl.commands[activeCmdTab] || tmpl.commands[0])}</pre>
+        <button class="cmd-copy-btn" onclick="copyCmd(${activeCmdTab})">📋 Copy</button>
+      </div>`;
+  }
+
+  // Hint text
+  const hintKey = { windows: 'cmd_hint_win', mac: 'cmd_hint_mac', linux: 'cmd_hint_linux', unknown: 'cmd_hint_linux' }[os];
+  const hintEl  = document.getElementById('cmd-hint-text');
+  if (hintEl) hintEl.textContent = t(hintKey);
+}
+
+function switchCmdTab(i) {
+  activeCmdTab = i;
+  renderCmdPanel();
+}
+
+function copyCmd(i) {
+  const os   = detectedOS;
+  const tmpl = CMD_TEMPLATES[os] || CMD_TEMPLATES.unknown;
+  const cmd  = tmpl.commands[i] || tmpl.commands[0];
+  navigator.clipboard.writeText(cmd).then(() => {
+    showToast(t('cmd_copied'), 'ok');
+  }).catch(() => {
+    // Fallback for browsers without clipboard API
+    const ta = document.createElement('textarea');
+    ta.value = cmd;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast(t('cmd_copied'), 'ok');
+  });
+}
+
+// ===================================================================
+// State
+// ===================================================================
+let usersData    = [];
+let listData     = [];
 let usersHeaders = [];
-let logFiles     = [];   // [{name, content}]
+let logFiles     = [];
 let matchResults = [];
 
 const COL_ID    = 'Source Backlog user id';
@@ -659,35 +1248,51 @@ const COL_NAME  = 'Source Backlog user display name';
 const COL_EMAIL = 'Source Backlog user email';
 const COL_DEST  = 'Destination Backlog user name';
 
-// ===== Check API support =====
+// ===================================================================
+// Init
+// ===================================================================
 if (!('showDirectoryPicker' in window)) {
   document.getElementById('api-warn').style.display = 'block';
 }
 
-// ===== Folder Picker (File System Access API) =====
+// Apply initial language
+document.getElementById('lang-' + currentLang)?.classList.add('active');
+['lang-ja','lang-en','lang-vi'].forEach(id => {
+  if (id !== 'lang-' + currentLang) document.getElementById(id)?.classList.remove('active');
+});
+applyLang();
+
+// ===================================================================
+// Folder Picker (File System Access API)
+// ===================================================================
 async function pickFolder() {
   if (!('showDirectoryPicker' in window)) return;
   let dirHandle;
   try {
     dirHandle = await window.showDirectoryPicker({ mode: 'read' });
   } catch (e) {
-    if (e.name !== 'AbortError') showToast('フォルダ選択がキャンセルされました', 'warn');
+    if (e.name !== 'AbortError') showToast(t('toast_folder_cancel'), 'warn');
     return;
   }
 
   const folderName = dirHandle.name;
   document.getElementById('folder-path').textContent = '📂 ' + folderName;
   document.getElementById('folder-pick-area').classList.add('loaded');
-  document.getElementById('folder-pick-area').onclick = null; // prevent re-open
+  document.getElementById('folder-pick-area').onclick = null;
   document.getElementById('file-status-grid').style.display = 'grid';
 
-  // --- Load mapping/ ---
+  // Reset detail status
+  setFsiWaiting('fsi-users', 'fsi-users-detail');
+  setFsiWaiting('fsi-list',  'fsi-list-detail');
+  setFsiWaiting('fsi-log',   'fsi-log-detail');
+
+  // Load mapping/
   let mappingDir;
   try {
     mappingDir = await dirHandle.getDirectoryHandle('mapping');
   } catch {
-    setFsiError('fsi-users', 'mapping/ フォルダが見つかりません');
-    setFsiError('fsi-list',  'mapping/ フォルダが見つかりません');
+    setFsiError('fsi-users', t('mapping_not_found'));
+    setFsiError('fsi-list',  t('mapping_not_found'));
   }
 
   if (mappingDir) {
@@ -695,12 +1300,12 @@ async function pickFolder() {
     await loadCsvFromDir(mappingDir, 'users_list.csv', 'list');
   }
 
-  // --- Load log/ ---
+  // Load log/
   let logDir;
   try {
     logDir = await dirHandle.getDirectoryHandle('log');
   } catch {
-    setFsiInfo('fsi-log', 'fsi-log-detail', 'log/ フォルダが見つかりません（スキップ）', 'err');
+    setFsiInfo('fsi-log', 'fsi-log-detail', t('log_dir_not_found'), 'err');
   }
 
   if (logDir) {
@@ -714,24 +1319,23 @@ async function pickFolder() {
         chips.push(`<span class="log-chip ok">📄 ${esc(name)}</span>`);
       }
     }
-    const detail = logFiles.length
-      ? `${logFiles.length} 件のログファイルを読み込みました`
-      : 'ログファイル（.log）が見つかりません';
+    const detail = logFiles.length ? t('log_loaded', logFiles.length) : t('log_not_found');
     setFsiInfo('fsi-log', 'fsi-log-detail', detail, logFiles.length ? 'ok' : 'err');
     document.getElementById('log-file-list').innerHTML = chips.join('');
   }
 
   updateNextBtn();
   showClearBtn();
+  updateZipSection();
 }
 
 async function loadCsvFromDir(dirHandle, filename, type) {
-  const fsiId     = type === 'users' ? 'fsi-users' : 'fsi-list';
-  const detailId  = fsiId + '-detail';
-  const fnId      = type === 'users' ? 'fn-users' : 'fn-list';
-  const dzId      = type === 'users' ? 'dz-users' : 'dz-list';
+  const fsiId    = type === 'users' ? 'fsi-users' : 'fsi-list';
+  const detailId = fsiId + '-detail';
+  const fnId     = type === 'users' ? 'fn-users' : 'fn-list';
+  const dzId     = type === 'users' ? 'dz-users' : 'dz-list';
 
-  setFsiInfo(fsiId, detailId, '読み込み中…', 'loading');
+  setFsiInfo(fsiId, detailId, t('status_loading'), 'loading');
   try {
     const fileHandle = await dirHandle.getFileHandle(filename);
     const file = await fileHandle.getFile();
@@ -746,8 +1350,7 @@ async function loadCsvFromDir(dirHandle, filename, type) {
             listData = res.data;
           }
           const count = res.data.length;
-          setFsiInfo(fsiId, detailId, `✓ ${count} 行 読み込み完了`, 'ok');
-          // also update fallback UI
+          setFsiInfo(fsiId, detailId, t('status_ok', count), 'ok');
           if (document.getElementById(fnId))
             document.getElementById(fnId).textContent = '✓ ' + filename + '（' + count + '行）';
           if (document.getElementById(dzId))
@@ -758,7 +1361,17 @@ async function loadCsvFromDir(dirHandle, filename, type) {
       });
     });
   } catch (e) {
-    setFsiError(fsiId, `${filename} が見つかりません`);
+    setFsiError(fsiId, t('status_not_found', filename));
+  }
+}
+
+function setFsiWaiting(itemId, detailId) {
+  const item = document.getElementById(itemId);
+  if (item) item.className = 'file-status-item';
+  const det = document.getElementById(detailId);
+  if (det) {
+    det.textContent = t('status_waiting');
+    det.setAttribute('data-status', 'waiting');
   }
 }
 
@@ -766,13 +1379,19 @@ function setFsiInfo(itemId, detailId, msg, state) {
   const item = document.getElementById(itemId);
   if (!item) return;
   item.className = 'file-status-item ' + (state || '');
-  document.getElementById(detailId).textContent = msg;
+  const det = document.getElementById(detailId);
+  if (det) {
+    det.textContent = msg;
+    det.removeAttribute('data-status');
+  }
 }
 function setFsiError(itemId, msg) {
   setFsiInfo(itemId, itemId + '-detail', msg, 'err');
 }
 
-// ===== Drop Zone (fallback) =====
+// ===================================================================
+// Drop Zone (fallback)
+// ===================================================================
 function dzDragOver(e, id) {
   e.preventDefault();
   document.getElementById(id)?.classList.add('drag-over');
@@ -822,35 +1441,31 @@ function showClearBtn() {
 }
 
 function clearAll() {
-  if (!confirm('読み込んだデータをすべてクリアしますか？\nフォルダの選択からやり直しになります。')) return;
+  if (!confirm(t('confirm_clear'))) return;
 
-  // reset state
   usersData    = [];
   listData     = [];
   logFiles     = [];
   matchResults = [];
   usersHeaders = [];
 
-  // reset folder picker
   const fpa = document.getElementById('folder-pick-area');
   fpa.classList.remove('loaded');
   fpa.onclick = pickFolder;
   document.getElementById('folder-path').textContent = '';
   document.getElementById('file-status-grid').style.display = 'none';
 
-  // reset file status items
   ['fsi-users','fsi-list','fsi-log'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.className = 'file-status-item';
   });
   ['fsi-users-detail','fsi-list-detail','fsi-log-detail'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.textContent = '待機中…';
+    if (el) { el.textContent = t('status_waiting'); el.setAttribute('data-status','waiting'); }
   });
   const logList = document.getElementById('log-file-list');
   if (logList) logList.innerHTML = '';
 
-  // reset fallback drop zones
   ['dz-users','dz-list'].forEach(id => {
     document.getElementById(id)?.classList.remove('loaded');
   });
@@ -858,20 +1473,21 @@ function clearAll() {
     const el = document.getElementById(id);
     if (el) el.textContent = '';
   });
-  // reset fallback file inputs
   ['file-users','file-list'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
 
-  // reset buttons
   document.getElementById('btn-next1').disabled = true;
   document.getElementById('btn-clear').style.display = 'none';
+  document.getElementById('zip-section').classList.remove('visible');
 
-  showToast('クリアしました', 'warn');
+  showToast(t('toast_cleared'), 'warn');
 }
 
-// ===== Sample Data =====
+// ===================================================================
+// Sample Data
+// ===================================================================
 function loadSample() {
   usersData = [
     { [COL_ID]: '柴尾　哲也', [COL_NAME]: '柴尾　哲也',              [COL_EMAIL]: '',                               [COL_DEST]: '' },
@@ -897,10 +1513,13 @@ function loadSample() {
   document.getElementById('fn-list').textContent = '✓ users_list.csv（サンプル 6件）';
   document.getElementById('dz-list').classList.add('loaded');
   updateNextBtn();
-  showToast('サンプルデータを読み込みました', 'ok');
+  updateZipSection();
+  showToast(t('toast_sample'), 'ok');
 }
 
-// ===== Step Navigation =====
+// ===================================================================
+// Step Navigation
+// ===================================================================
 function setStep(n) {
   ['section-load','section-match','section-edit'].forEach((id, i) => {
     document.getElementById(id).classList.toggle('visible', i + 1 === n);
@@ -915,7 +1534,9 @@ function setStep(n) {
 
 function goBack(to) { setStep(to); }
 
-// ===== STEP 2: Auto-Match =====
+// ===================================================================
+// STEP 2: Auto-Match
+// ===================================================================
 function buildEmailMap() {
   const map = {};
   listData.forEach(row => {
@@ -933,21 +1554,17 @@ function goToStep2() {
     let confidence = 0;
     let reason = '';
 
-    // 1) Email exact match
     if (srcEmail && emailMap[srcEmail]) {
-      dstName = emailMap[srcEmail];
+      dstName    = emailMap[srcEmail];
       confidence = 1.0;
-      reason = 'メール完全一致';
-    }
-    // 2) ID direct match in list
-    else if (srcId && listData.find(r => r.Name === srcId)) {
-      dstName = srcId;
+      reason     = t('reason_email');
+    } else if (srcId && listData.find(r => r.Name === srcId)) {
+      dstName    = srcId;
       confidence = 0.85;
-      reason = 'ID一致';
+      reason     = t('reason_id');
     }
 
     return { rowIdx: idx, srcEmail, dstName, confidence, reason, accepted: dstName ? null : 'no-match' };
-    // null = pending decision, 'no-match' = skip (no candidate)
   });
 
   renderMatchTable();
@@ -956,13 +1573,10 @@ function goToStep2() {
 
 function renderMatchTable() {
   const tbody = document.getElementById('match-tbody');
-  const matches = matchResults.filter(m => m.accepted !== 'no-match');
-  const noMatch = matchResults.filter(m => m.accepted === 'no-match');
-
   let html = '';
   matchResults.forEach((m, i) => {
-    const row = usersData[m.rowIdx];
-    const name = esc(row[COL_NAME]);
+    const row   = usersData[m.rowIdx];
+    const name  = esc(row[COL_NAME]);
     const email = esc(row[COL_EMAIL] || '—');
 
     if (m.accepted === 'no-match') {
@@ -970,11 +1584,9 @@ function renderMatchTable() {
         <td class="row-status">⬜</td>
         <td class="cell-name">${name}</td>
         <td class="cell-mail">${email}</td>
-        <td><span style="color:var(--text-muted);font-size:12px">候補なし — STEP 3 で手動設定</span></td>
+        <td><span style="color:var(--text-muted);font-size:12px">${t('no_candidate')}</span></td>
         <td>—</td>
-        <td style="text-align:center">
-          <span class="badge badge-gray">スキップ</span>
-        </td>
+        <td style="text-align:center"><span class="badge badge-gray">${t('skip_badge')}</span></td>
       </tr>`;
     } else {
       const statusClass = m.accepted === true ? 'accepted' : m.accepted === false ? 'rejected' : 'pending';
@@ -1000,6 +1612,10 @@ function renderMatchTable() {
 
   tbody.innerHTML = html;
   updateMatchStats();
+
+  // Sync table headers with i18n
+  const headers = document.querySelectorAll('#match-table th[data-i18n]');
+  headers.forEach(th => { th.textContent = t(th.getAttribute('data-i18n')); });
 }
 
 function statusIcon(accepted) {
@@ -1010,25 +1626,19 @@ function statusIcon(accepted) {
 
 function setMatch(i, val) {
   matchResults[i].accepted = val;
-  const tr = document.getElementById('mr-' + i);
-  tr.className = val ? 'accepted' : 'rejected';
-  tr.cells[0].textContent = statusIcon(val);
-  // swap button states
-  const btns = tr.querySelectorAll('button');
-  // re-render just this row for simplicity — re-render all
   renderMatchTable();
 }
 
 function acceptAll() {
   matchResults.forEach(m => { if (m.accepted !== 'no-match') m.accepted = true; });
   renderMatchTable();
-  showToast('全てのマッチを承認しました', 'ok');
+  showToast(t('toast_accept_all'), 'ok');
 }
 
 function rejectAll() {
   matchResults.forEach(m => { if (m.accepted !== 'no-match') m.accepted = false; });
   renderMatchTable();
-  showToast('全てのマッチを拒否しました', 'warn');
+  showToast(t('toast_reject_all'), 'warn');
 }
 
 function updateMatchStats() {
@@ -1038,15 +1648,13 @@ function updateMatchStats() {
   const pending    = candidates.filter(m => m.accepted === null).length;
   const noMatch    = matchResults.filter(m => m.accepted === 'no-match').length;
   document.getElementById('match-stats').innerHTML =
-    `全 ${matchResults.length} 件 ／ <strong>${candidates.length} 件に候補あり</strong>` +
-    ` ／ 承認: ${accepted} ／ 拒否: ${rejected}` +
-    (pending ? ` ／ <span style="color:var(--yellow)">未判定: ${pending}</span>` : '') +
-    (noMatch ? ` ／ 候補なし: ${noMatch}` : '');
+    t('match_stats', matchResults.length, candidates.length, accepted, rejected, pending, noMatch);
 }
 
-// ===== STEP 3: Edit =====
+// ===================================================================
+// STEP 3: Edit
+// ===================================================================
 function applyMatchAndGoStep3() {
-  // Apply accepted matches into usersData
   matchResults.forEach(m => {
     if (m.accepted === true) {
       usersData[m.rowIdx][COL_DEST] = m.dstName;
@@ -1056,9 +1664,8 @@ function applyMatchAndGoStep3() {
   setStep(3);
 }
 
-// Build option list from listData
 function buildDestOptions(currentVal) {
-  let html = '<option value="">— 未設定 —</option>';
+  let html = `<option value="">${t('dest_unset')}</option>`;
   listData.forEach(row => {
     const sel = row.Name === currentVal ? ' selected' : '';
     html += `<option value="${esc(row.Name)}"${sel}>${esc(row.Name)}　${esc(row.Email)}</option>`;
@@ -1066,14 +1673,13 @@ function buildDestOptions(currentVal) {
   return html;
 }
 
-function renderEditTable(filter) {
+function renderEditTable() {
   const tbody = document.getElementById('edit-tbody');
   const q = (document.getElementById('search-box')?.value || '').toLowerCase();
   const f = document.getElementById('filter-select')?.value || 'all';
 
   let rows = usersData.map((row, i) => ({ row, i }));
 
-  // Filter
   if (q) rows = rows.filter(({ row }) =>
     [row[COL_ID], row[COL_NAME], row[COL_EMAIL], row[COL_DEST]]
       .some(v => v && v.toLowerCase().includes(q))
@@ -1099,20 +1705,20 @@ function renderEditTable(filter) {
       <td class="row-status" id="rs-${i}">${dest ? '✅' : '⚠️'}</td>
     </tr>`;
   });
-  tbody.innerHTML = html || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">該当する行がありません</td></tr>';
+  tbody.innerHTML = html || `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">${t('no_rows')}</td></tr>`;
 
-  document.getElementById('filter-count').textContent = `${rows.length} / ${usersData.length} 件表示`;
+  document.getElementById('filter-count').textContent = t('display_count', rows.length, usersData.length);
   updateEditStats();
   refreshDuplicateWarnings();
 }
 
 function updateDest(i, val) {
   usersData[i][COL_DEST] = val;
-  const tr = document.getElementById('er-' + i);
-  const sel = document.getElementById('ds-' + i);
+  const tr   = document.getElementById('er-' + i);
+  const sel  = document.getElementById('ds-' + i);
   const stat = document.getElementById('rs-' + i);
-  if (tr) tr.className = val ? 'row-ok' : 'row-empty';
-  if (sel) sel.className = 'dest-select ' + (val ? '' : 'empty');
+  if (tr)   tr.className    = val ? 'row-ok' : 'row-empty';
+  if (sel)  sel.className   = 'dest-select ' + (val ? '' : 'empty');
   if (stat) stat.textContent = val ? '✅' : '⚠️';
   updateEditStats();
   refreshDuplicateWarnings();
@@ -1147,14 +1753,16 @@ function updateEditStats() {
   const done  = usersData.filter(r => r[COL_DEST]).length;
   const empty = usersData.length - done;
   document.getElementById('edit-stats-bar').innerHTML =
-    `<div class="stat"><div class="dot dot-green"></div> 設定済み: <strong>${done}</strong></div>` +
-    `<div class="stat"><div class="dot dot-red"></div> 未設定: <strong>${empty}</strong></div>` +
-    `<div class="stat"><div class="dot dot-yellow"></div> 全ユーザー: <strong>${usersData.length}</strong></div>`;
+    `<div class="stat"><div class="dot dot-green"></div> ${t('stats_done')}: <strong>${done}</strong></div>` +
+    `<div class="stat"><div class="dot dot-red"></div> ${t('stats_empty')}: <strong>${empty}</strong></div>` +
+    `<div class="stat"><div class="dot dot-yellow"></div> ${t('stats_total')}: <strong>${usersData.length}</strong></div>`;
 }
 
 function filterTable() { renderEditTable(); }
 
-// ===== Download =====
+// ===================================================================
+// Download CSV
+// ===================================================================
 function downloadCSV() {
   const csv = Papa.unparse(usersData, {
     columns: usersHeaders,
@@ -1169,10 +1777,113 @@ function downloadCSV() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast('users.csv をダウンロードしました ✓', 'ok');
+  showToast(t('toast_csv_saved'), 'ok');
 }
 
-// ===== Utilities =====
+// ===================================================================
+// ZIP Download (support logs)
+// ===================================================================
+function updateZipSection() {
+  const hasLogs = logFiles.length > 0;
+  const hasCSV  = usersData.length > 0;
+  const section = document.getElementById('zip-section');
+
+  if (hasLogs || hasCSV) {
+    section.classList.add('visible');
+    renderZipChecklist();
+  } else {
+    section.classList.remove('visible');
+  }
+}
+
+function renderZipChecklist() {
+  const ul = document.getElementById('zip-checklist');
+  if (!ul) return;
+  const items = [];
+
+  if (logFiles.length > 0) {
+    items.push({ label: t('zip_item_logs', logFiles.length), ready: true });
+  } else {
+    items.push({ label: t('zip_no_logs'), ready: false });
+  }
+  if (usersData.length > 0) {
+    items.push({ label: t('zip_item_csv'), ready: true });
+  }
+  items.push({ label: t('zip_item_info'), ready: true });
+
+  ul.innerHTML = items.map(item =>
+    `<li class="${item.ready ? 'ready' : ''}">${item.ready ? '✓' : '—'} ${esc(item.label)}</li>`
+  ).join('');
+
+  const btn = document.getElementById('btn-zip');
+  if (btn) btn.disabled = logFiles.length === 0 && usersData.length === 0;
+}
+
+async function downloadLogZip() {
+  if (typeof JSZip === 'undefined') {
+    showToast('JSZip library not loaded', 'warn');
+    return;
+  }
+
+  const zip = new JSZip();
+
+  // 1) Log files
+  if (logFiles.length > 0) {
+    const logFolder = zip.folder('log');
+    logFiles.forEach(({ name, content }) => {
+      logFolder.file(name, content);
+    });
+  }
+
+  // 2) users.csv (current state)
+  if (usersData.length > 0 && usersHeaders.length > 0) {
+    const csv = Papa.unparse(usersData, {
+      columns: usersHeaders,
+      quotes: true,
+      newline: '\r\n'
+    });
+    zip.file('users.csv', csv);
+  }
+
+  // 3) support-info.txt
+  const now    = new Date();
+  const tzOff  = -now.getTimezoneOffset();
+  const tzSign = tzOff >= 0 ? '+' : '-';
+  const tzH    = String(Math.floor(Math.abs(tzOff) / 60)).padStart(2, '0');
+  const tzM    = String(Math.abs(tzOff) % 60).padStart(2, '0');
+  const info   = [
+    `Generated At : ${now.toISOString()} (UTC${tzSign}${tzH}:${tzM})`,
+    `Language     : ${currentLang}`,
+    `OS Detected  : ${detectedOS}`,
+    `User Agent   : ${navigator.userAgent}`,
+    `Log Files    : ${logFiles.length} file(s) — ${logFiles.map(f => f.name).join(', ') || 'none'}`,
+    `users.csv    : ${usersData.length} row(s)`,
+    `Tool         : Backlog Migration Support Tool`,
+    `Tool URL     : ${location.href}`,
+  ].join('\n');
+  zip.file('support-info.txt', info);
+
+  try {
+    const blob     = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    const fname    = `backlog-support-${now.toISOString().slice(0,19).replace(/[-:T]/g, (m) => m === 'T' ? '-' : m === '-' || m === ':' ? m : m)}.zip`
+      .replace(/:/g, '');
+    const url      = URL.createObjectURL(blob);
+    const a        = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast(t('toast_zip_saved'), 'ok');
+  } catch (e) {
+    console.error(e);
+    showToast(t('toast_zip_error'), 'warn');
+  }
+}
+
+// ===================================================================
+// Utilities
+// ===================================================================
 function esc(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
