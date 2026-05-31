@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Backlog Migration Support Tool</title>
   <meta name="description" content="Backlog移行ツールのusers.csvをブラウザで簡単に編集。自動マッチング・ログZIPダウンロード・多言語対応。">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha384-D/t0ZMqQW31H3az8ktEiNb39wyKnS82iFY52QPACM+IjKW3jDUhyIgh2PApRqJZs" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
   <style>
     /* ===== Design System ===== */
     :root {
@@ -868,9 +868,9 @@ const LANGS = {
     no_candidate:       '候補なし — STEP 3 で手動設定',
     skip_badge:         'スキップ',
     match_stats:        (total, cand, accepted, rejected, pending, noMatch) =>
-      `全 ${total} 件 ／ <strong>${cand} 件に候補あり</strong>` +
+      `全 ${total} 件 ／ ${cand} 件に候補あり` +
       ` ／ 承認: ${accepted} ／ 拒否: ${rejected}` +
-      (pending ? ` ／ <span style="color:var(--yellow)">未判定: ${pending}</span>` : '') +
+      (pending ? ` ／ 未判定: ${pending}` : '') +
       (noMatch ? ` ／ 候補なし: ${noMatch}` : ''),
     reason_email:       'メール完全一致',
     reason_id:          'ID一致',
@@ -955,9 +955,9 @@ const LANGS = {
     no_candidate:       'No candidate — Set manually in STEP 3',
     skip_badge:         'Skip',
     match_stats:        (total, cand, accepted, rejected, pending, noMatch) =>
-      `Total: ${total} ／ <strong>Candidates: ${cand}</strong>` +
+      `Total: ${total} ／ Candidates: ${cand}` +
       ` ／ Accepted: ${accepted} ／ Rejected: ${rejected}` +
-      (pending ? ` ／ <span style="color:var(--yellow)">Pending: ${pending}</span>` : '') +
+      (pending ? ` ／ Pending: ${pending}` : '') +
       (noMatch ? ` ／ No candidate: ${noMatch}` : ''),
     reason_email:       'Email exact match',
     reason_id:          'ID match',
@@ -1042,9 +1042,9 @@ const LANGS = {
     no_candidate:       'Không có ứng viên — Đặt thủ công ở STEP 3',
     skip_badge:         'Bỏ Qua',
     match_stats:        (total, cand, accepted, rejected, pending, noMatch) =>
-      `Tổng: ${total} ／ <strong>Ứng viên: ${cand}</strong>` +
+      `Tổng: ${total} ／ Ứng viên: ${cand}` +
       ` ／ Chấp nhận: ${accepted} ／ Từ chối: ${rejected}` +
-      (pending ? ` ／ <span style="color:var(--yellow)">Chờ xử lý: ${pending}</span>` : '') +
+      (pending ? ` ／ Chờ xử lý: ${pending}` : '') +
       (noMatch ? ` ／ Không có ứng viên: ${noMatch}` : ''),
     reason_email:       'Khớp email chính xác',
     reason_id:          'Khớp ID',
@@ -1344,10 +1344,10 @@ async function loadCsvFromDir(dirHandle, filename, type) {
         header: true, skipEmptyLines: true,
         complete(res) {
           if (type === 'users') {
-            usersData    = res.data;
-            usersHeaders = res.meta.fields;
+            usersData    = sanitizeRows(res.data);
+            usersHeaders = res.meta.fields.filter(f => !DANGEROUS_KEYS.has(f));
           } else {
-            listData = res.data;
+            listData = sanitizeRows(res.data);
           }
           const count = res.data.length;
           setFsiInfo(fsiId, detailId, t('status_ok', count), 'ok');
@@ -1416,12 +1416,12 @@ function parseCSV(file, type) {
     header: true, skipEmptyLines: true,
     complete(res) {
       if (type === 'users') {
-        usersData    = res.data;
-        usersHeaders = res.meta.fields;
+        usersData    = sanitizeRows(res.data);
+        usersHeaders = res.meta.fields.filter(f => !DANGEROUS_KEYS.has(f));
         document.getElementById('fn-users').textContent = '✓ ' + file.name + '（' + res.data.length + '行）';
         document.getElementById('dz-users')?.classList.add('loaded');
       } else {
-        listData = res.data;
+        listData = sanitizeRows(res.data);
         document.getElementById('fn-list').textContent = '✓ ' + file.name + '（' + res.data.length + '行）';
         document.getElementById('dz-list')?.classList.add('loaded');
       }
@@ -1647,7 +1647,7 @@ function updateMatchStats() {
   const rejected   = candidates.filter(m => m.accepted === false).length;
   const pending    = candidates.filter(m => m.accepted === null).length;
   const noMatch    = matchResults.filter(m => m.accepted === 'no-match').length;
-  document.getElementById('match-stats').innerHTML =
+  document.getElementById('match-stats').textContent =
     t('match_stats', matchResults.length, candidates.length, accepted, rejected, pending, noMatch);
 }
 
@@ -1753,9 +1753,9 @@ function updateEditStats() {
   const done  = usersData.filter(r => r[COL_DEST]).length;
   const empty = usersData.length - done;
   document.getElementById('edit-stats-bar').innerHTML =
-    `<div class="stat"><div class="dot dot-green"></div> ${t('stats_done')}: <strong>${done}</strong></div>` +
-    `<div class="stat"><div class="dot dot-red"></div> ${t('stats_empty')}: <strong>${empty}</strong></div>` +
-    `<div class="stat"><div class="dot dot-yellow"></div> ${t('stats_total')}: <strong>${usersData.length}</strong></div>`;
+    `<div class="stat"><div class="dot dot-green"></div> ${esc(t('stats_done'))}: <strong>${done}</strong></div>` +
+    `<div class="stat"><div class="dot dot-red"></div> ${esc(t('stats_empty'))}: <strong>${empty}</strong></div>` +
+    `<div class="stat"><div class="dot dot-yellow"></div> ${esc(t('stats_total'))}: <strong>${usersData.length}</strong></div>`;
 }
 
 function filterTable() { renderEditTable(); }
@@ -1884,6 +1884,18 @@ async function downloadLogZip() {
 // ===================================================================
 // Utilities
 // ===================================================================
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function sanitizeRows(rows) {
+  return rows.map(row => {
+    const clean = Object.create(null);
+    for (const key of Object.keys(row)) {
+      if (!DANGEROUS_KEYS.has(key)) clean[key] = row[key];
+    }
+    return clean;
+  });
+}
+
 function esc(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
