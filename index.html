@@ -887,6 +887,7 @@ const LANGS = {
     toast_zip_error:    'ZIPの作成に失敗しました',
     toast_folder_cancel:'フォルダ選択がキャンセルされました',
     confirm_clear:      '読み込んだデータをすべてクリアしますか？\nフォルダの選択からやり直しになります。',
+    confirm_download_empty: (n) => `⚠️ 移行先ユーザーIDが未設定の行が ${n} 件あります。\nこのままダウンロードすると移行時にエラーになります。\n\nダウンロードしますか？`,
     zip_item_logs:      (n) => `📄 ログファイル ${n} 件`,
     zip_item_csv:       'users.csv（現在の編集内容）',
     zip_item_info:      'support-info.txt',
@@ -974,6 +975,7 @@ const LANGS = {
     toast_zip_error:    'Failed to create ZIP',
     toast_folder_cancel:'Folder selection cancelled',
     confirm_clear:      'Clear all loaded data?\nYou will need to re-select the folder.',
+    confirm_download_empty: (n) => `⚠️ ${n} row(s) have no destination user ID set.\nDownloading as-is will cause migration errors.\n\nProceed with download?`,
     zip_item_logs:      (n) => `📄 Log files: ${n}`,
     zip_item_csv:       'users.csv (current edit)',
     zip_item_info:      'support-info.txt',
@@ -1061,6 +1063,7 @@ const LANGS = {
     toast_zip_error:    'Không thể tạo ZIP',
     toast_folder_cancel:'Đã hủy chọn thư mục',
     confirm_clear:      'Xóa tất cả dữ liệu đã tải?\nBạn sẽ cần chọn lại thư mục.',
+    confirm_download_empty: (n) => `⚠️ ${n} hàng chưa đặt ID người dùng đích.\nTải về như hiện tại sẽ gây lỗi khi di chuyển.\n\nTiếp tục tải về?`,
     zip_item_logs:      (n) => `📄 Tệp log: ${n}`,
     zip_item_csv:       'users.csv (chỉnh sửa hiện tại)',
     zip_item_info:      'support-info.txt',
@@ -1547,6 +1550,7 @@ function buildEmailMap() {
 
 function goToStep2() {
   const emailMap = buildEmailMap();
+  const nameSet = new Set(listData.map(r => r.Name));
   matchResults = usersData.map((row, idx) => {
     const srcEmail = (row[COL_EMAIL] || '').trim().toLowerCase();
     const srcId    = (row[COL_ID] || '').trim();
@@ -1558,7 +1562,7 @@ function goToStep2() {
       dstName    = emailMap[srcEmail];
       confidence = 1.0;
       reason     = t('reason_email');
-    } else if (srcId && listData.find(r => r.Name === srcId)) {
+    } else if (srcId && nameSet.has(srcId)) {
       dstName    = srcId;
       confidence = 0.85;
       reason     = t('reason_id');
@@ -1764,12 +1768,16 @@ function filterTable() { renderEditTable(); }
 // Download CSV
 // ===================================================================
 function downloadCSV() {
+  const emptyCount = usersData.filter(r => !r[COL_DEST]).length;
+  if (emptyCount > 0 && !confirm(t('confirm_download_empty', emptyCount))) return;
+
   const csv = Papa.unparse(usersData, {
     columns: usersHeaders,
     quotes: true,
     newline: '\r\n'
   });
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url; a.download = 'users.csv';
@@ -1865,8 +1873,7 @@ async function downloadLogZip() {
 
   try {
     const blob     = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
-    const fname    = `backlog-support-${now.toISOString().slice(0,19).replace(/[-:T]/g, (m) => m === 'T' ? '-' : m === '-' || m === ':' ? m : m)}.zip`
-      .replace(/:/g, '');
+    const fname    = `backlog-support-${now.toISOString().slice(0,19).replace(/[T:]/g, '-')}.zip`;
     const url      = URL.createObjectURL(blob);
     const a        = document.createElement('a');
     a.href = url; a.download = fname;
