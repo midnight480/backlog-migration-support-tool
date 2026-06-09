@@ -1,117 +1,119 @@
 # backlog-migration-support-tool
 
-[Backlog 移行ツール](https://backlog.com/ja/backlog-migration/releases.html) の利用時に発生しやすいエラーを解消するためのブラウザベースのサポートツールです。
+> 🇯🇵 [日本語版 README](README_ja.md)
 
-## 概要
+A browser-based support tool for resolving common errors when using the [Backlog Migration Tool](https://backlog.com/ja/backlog-migration/releases.html).
 
-`init` コマンド実行後に生成される CSV ファイルを簡単に編集できる Web アプリです。  
-サーバー不要・インストール不要。`index.html` をブラウザで開くだけで動作します。
+## Overview
 
-## 機能
+A web app that makes it easy to edit CSV files generated after running the `init` command.  
+No server or installation required — just open `index.html` in your browser.
 
-### 1. ユーザーマッピング CSV エディタ
+## Features
 
-| ステップ | 内容 |
-|----------|------|
-| **STEP 1** 作業フォルダ選択 | 移行ツールを展開したフォルダを選択すると `mapping/`・`log/` を自動読み込み |
-| **STEP 2** 自動マッチング確認 | メールアドレス一致で移行先ユーザーを自動提案。行ごとの承認/拒否 + 一括承認/拒否 |
-| **STEP 3** 手動編集・保存 | ドロップダウンで移行先を設定・絞り込み検索・UTF-8 で CSV ダウンロード |
+### 1. User Mapping CSV Editor
 
-### 2. ログ収集（今後実装予定）
+| Step | Description |
+|------|-------------|
+| **STEP 1** Select working folder | Select the extracted migration tool folder to auto-load `mapping/` and `log/` |
+| **STEP 2** Review auto-matching | Automatically suggests destination users by email match. Approve/reject per row or in bulk |
+| **STEP 3** Manual edit & save | Set destination via dropdown, filter search, download CSV in UTF-8 |
 
-移行実行後のログファイルを解析し、既知エラーパターンと照合してサポート問い合わせ用レポートを生成します。
+### 2. Log Collection (planned)
 
-## 対象ファイル
+Parses log files after migration runs, matches known error patterns, and generates a support inquiry report.
 
-`init` コマンドを実行すると `mapping/` ディレクトリに以下のファイルが生成されます。
+## Target Files
 
-| ファイル | 説明 |
-|----------|------|
-| `mapping/users.csv` | ユーザーマッピングファイル（編集対象） |
-| `mapping/users_list.csv` | 移行先スペースのユーザー一覧（参照用） |
+Running the `init` command generates the following files in the `mapping/` directory.
 
-### `users.csv` のカラム
+| File | Description |
+|------|-------------|
+| `mapping/users.csv` | User mapping file (edit target) |
+| `mapping/users_list.csv` | Destination space user list (reference) |
 
-| カラム | 説明 |
-|--------|------|
-| `Source Backlog user id` | 移行元ユーザーID |
-| `Source Backlog user display name` | 移行元表示名 |
-| `Source Backlog user email` | 移行元メールアドレス |
-| `Destination Backlog user name` | **移行先ユーザーID**（ここを埋める必要がある）|
+### `users.csv` Columns
 
-> ⚠️ `Destination Backlog user name` が空のままだと移行時に「ユーザーをコンバートできませんでした」エラーが発生します。
+| Column | Description |
+|--------|-------------|
+| `Source Backlog user id` | Source user ID |
+| `Source Backlog user display name` | Source display name |
+| `Source Backlog user email` | Source email address |
+| `Destination Backlog user name` | **Destination user ID** (must be filled in) |
 
-## 使い方
+> ⚠️ If `Destination Backlog user name` is left empty, migration will fail with "Failed to convert user" error.
 
-### 事前準備
+## Usage
 
-1. [Backlog 移行ツール](https://backlog.com/ja/backlog-migration/releases.html) をダウンロード・展開
-2. `init` コマンドを実行して `mapping/` ディレクトリを生成
+### Prerequisites
+
+1. Download and extract the [Backlog Migration Tool](https://backlog.com/ja/backlog-migration/releases.html)
+2. Run the `init` command to generate the `mapping/` directory
 
 ```bash
-# Zip版（macOS）の場合
+# Zip version (macOS)
 ./bin/backlog-migration init \
-  --src.key <移行元APIキー> \
-  --src.url https://<スペース名>.backlog.com/ \
-  --dst.key <移行先APIキー> \
-  --dst.url https://<スペース名>.backlog.com/ \
-  --projectKey <移行元プロジェクトキー>:<移行先プロジェクトキー>
+  --src.key <source API key> \
+  --src.url https://<space-name>.backlog.com/ \
+  --dst.key <destination API key> \
+  --dst.url https://<space-name>.backlog.com/ \
+  --projectKey <source project key>:<destination project key>
 ```
 
-### ツールの起動
+### Launching the Tool
 
 ```bash
-# index.html をブラウザで開く（ダブルクリックでも可）
+# Open index.html in your browser (double-click also works)
 open index.html
 ```
 
-> ⚠️ **フォルダ選択機能（File System Access API）は Chrome / Edge のみ対応**です。  
-> Safari・Firefox をお使いの場合は「個別ファイルで読み込む」欄を展開してください。
+> ⚠️ **Folder selection (File System Access API) is supported only in Chrome / Edge.**  
+> If you use Safari or Firefox, expand the "Load individual files" section.
 
-### 操作フロー
+### Workflow
 
 ```
-① 作業フォルダを選択
-   └─ backlog-migration-1.7.0/ フォルダ全体を選択
+① Select working folder
+   └─ Select the entire backlog-migration-1.7.0/ folder
       → mapping/users.csv ✅
       → mapping/users_list.csv ✅
-      → log/*.log ✅（自動取得）
+      → log/*.log ✅ (auto-loaded)
 
-② 自動マッチング確認
-   └─ メールアドレスが一致するユーザーを自動提案
-      → 行ごとに ✅ / ✖ で承認・拒否
-      → 「全て承認」で一括処理も可能
+② Review auto-matching
+   └─ Users with matching email addresses are suggested automatically
+      → Approve/reject per row with ✅ / ✖
+      → "Approve all" for bulk processing
 
-③ 手動編集・保存
-   └─ 未設定の行（赤ハイライト）をドロップダウンで設定
-      → 「users.csv をダウンロード」で保存
-      → 移行ツールの mapping/ に上書き保存して移行を再実行
+③ Manual edit & save
+   └─ Set unconfigured rows (red highlight) via dropdown
+      → Save with "Download users.csv"
+      → Overwrite in the migration tool's mapping/ and re-run migration
 ```
 
-## 対応エラー
+## Supported Errors
 
-[Backlog 移行ツールでエラーが発生して移行できません](https://support-ja.backlog.com/hc/ja/articles/29471143249817) に記載されている以下のエラーに対応します。
+Addresses the following errors documented in [Migration tool errors prevent migration](https://support-ja.backlog.com/hc/ja/articles/29471143249817).
 
-| エラー | 原因 | 対応 |
-|--------|------|------|
-| `ユーザーをコンバートできませんでした` | `Destination Backlog user name` が未設定 | 本ツールで設定 |
-| `The maximum number of status are 12` | 状態数が上限超過 | ログレポートで検出・案内（実装予定）|
-| `No such Attachment` | 添付ファイル削除済み | 警告として分類（実装予定）|
-| `project.EditProject.err.exist.key` | プロジェクトキー重複 | ログレポートで案内（実装予定）|
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| `Failed to convert user` | `Destination Backlog user name` not set | Configure with this tool |
+| `The maximum number of status are 12` | Status count exceeds limit | Detect & guide via log report (planned) |
+| `No such Attachment` | Attachment already deleted | Classify as warning (planned) |
+| `project.EditProject.err.exist.key` | Duplicate project key | Guide via log report (planned) |
 
-## 技術スタック
+## Tech Stack
 
-- HTML / Vanilla CSS / Vanilla JavaScript（ビルド不要）
-- [PapaParse](https://www.papaparse.com/)（CSV パース、CDN 経由）
-- File System Access API（フォルダ選択）
+- HTML / Vanilla CSS / Vanilla JavaScript (no build step)
+- [PapaParse](https://www.papaparse.com/) (CSV parsing, via CDN)
+- File System Access API (folder selection)
 
-## 参考リンク
+## References
 
-- [Backlog 移行ツール ダウンロードページ](https://backlog.com/ja/backlog-migration/releases.html)
-- [マニュアル（Zip版）](https://backlog.com/ja/backlog-migration/backlog-migration-manual-zip-1.7.0.pdf)
-- [マニュアル（Jar版）](https://backlog.com/ja/backlog-migration/backlog-migration-manual-jar-1.7.0.pdf)
-- [エラーが発生して移行できません（サポート記事）](https://support-ja.backlog.com/hc/ja/articles/29471143249817)
+- [Backlog Migration Tool Download](https://backlog.com/ja/backlog-migration/releases.html)
+- [Manual (Zip version)](https://backlog.com/ja/backlog-migration/backlog-migration-manual-zip-1.7.0.pdf)
+- [Manual (Jar version)](https://backlog.com/ja/backlog-migration/backlog-migration-manual-jar-1.7.0.pdf)
+- [Migration errors support article](https://support-ja.backlog.com/hc/ja/articles/29471143249817)
 
-## ライセンス
+## License
 
 MIT License — Copyright (c) 2026 Taro Yamada
