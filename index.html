@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Backlog Migration Support Tool</title>
-  <meta name="description" content="Backlog移行ツールのusers.csvをブラウザで簡単に編集。自動マッチング・ログZIPダウンロード・多言語対応。">
+  <meta name="description" content="">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha384-D/t0ZMqQW31H3az8ktEiNb39wyKnS82iFY52QPACM+IjKW3jDUhyIgh2PApRqJZs" crossorigin="anonymous"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
   <style>
@@ -692,7 +692,7 @@
         <div class="cmd-panel-header">
           <div class="cmd-panel-title">
             💻 <span data-i18n="cmd_panel_title">実行コマンドサポート</span>
-            <span class="os-badge" id="os-badge">検出中…</span>
+            <span class="os-badge" id="os-badge" data-i18n="os_detecting">検出中…</span>
           </div>
           <span style="font-size:12px;color:var(--text-muted)" data-i18n="cmd_panel_hint_copy">コピーしてターミナルに貼り付けて実行</span>
         </div>
@@ -896,6 +896,15 @@ const LANGS = {
     os_mac:             'macOS 検出',
     os_linux:           'Linux 検出',
     os_unknown:         'OS 不明',
+    os_detecting:       '検出中…',
+    btn_copy:           'コピー',
+    file_loaded:        (name, n) => `✓ ${name}（${n}行）`,
+    sample_users_loaded:(n) => `✓ users.csv（サンプル ${n}行）`,
+    sample_list_loaded: (n) => `✓ users_list.csv（サンプル ${n}件）`,
+    dup_warn:           'すでに他の行でも選択されています。マッピングで不整合となりエラーとなる可能性があります。',
+    toast_jszip_missing:'JSZip ライブラリが読み込まれていません',
+    cmd_hint_unknown:   'ヒント: ターミナルまたはコマンドプロンプトを開き、コマンドを貼り付けて実行してください。',
+    meta_description:   'Backlog移行ツールのusers.csvをブラウザで簡単に編集。自動マッチング・ログZIPダウンロード・多言語対応。',
   },
   en: {
     header_title:       'Backlog Migration Support Tool',
@@ -984,6 +993,15 @@ const LANGS = {
     os_mac:             'macOS detected',
     os_linux:           'Linux detected',
     os_unknown:         'OS unknown',
+    os_detecting:       'Detecting…',
+    btn_copy:           'Copy',
+    file_loaded:        (name, n) => `✓ ${name} (${n} rows)`,
+    sample_users_loaded:(n) => `✓ users.csv (sample: ${n} rows)`,
+    sample_list_loaded: (n) => `✓ users_list.csv (sample: ${n} entries)`,
+    dup_warn:           'This destination is already selected in another row. This may cause mapping inconsistencies and migration errors.',
+    toast_jszip_missing:'JSZip library not loaded',
+    cmd_hint_unknown:   'Tip: Open a terminal or command prompt, paste the command and run it.',
+    meta_description:   'Edit Backlog Migration Tool users.csv in your browser. Auto-matching, log ZIP download, and multilingual support.',
   },
   vi: {
     header_title:       'Công Cụ Hỗ Trợ Di Chuyển Backlog',
@@ -1072,6 +1090,15 @@ const LANGS = {
     os_mac:             'Phát hiện macOS',
     os_linux:           'Phát hiện Linux',
     os_unknown:         'Không rõ HĐH',
+    os_detecting:       'Đang phát hiện…',
+    btn_copy:           'Sao chép',
+    file_loaded:        (name, n) => `✓ ${name} (${n} dòng)`,
+    sample_users_loaded:(n) => `✓ users.csv (mẫu: ${n} dòng)`,
+    sample_list_loaded: (n) => `✓ users_list.csv (mẫu: ${n} mục)`,
+    dup_warn:           'Đích này đã được chọn ở hàng khác. Có thể gây mất nhất quán ánh xạ và lỗi khi di chuyển.',
+    toast_jszip_missing:'Thư viện JSZip chưa được tải',
+    cmd_hint_unknown:   'Gợi ý: Mở terminal hoặc Command Prompt, dán lệnh vào và chạy.',
+    meta_description:   'Chỉnh sửa users.csv của Backlog Migration Tool trong trình duyệt. Ghép cặp tự động, tải ZIP log, đa ngôn ngữ.',
   }
 };
 
@@ -1100,8 +1127,10 @@ function applyLang() {
   });
   // <html lang>
   document.documentElement.lang = currentLang;
-  // <title>
+  // <title> & meta description
   document.title = t('header_title');
+  const metaDesc = document.querySelector('meta[name="description"]');
+  if (metaDesc) metaDesc.content = t('meta_description');
   // Dynamic filter options
   document.querySelectorAll('#filter-select option[data-i18n]').forEach(opt => {
     opt.textContent = t(opt.getAttribute('data-i18n'));
@@ -1112,12 +1141,22 @@ function applyLang() {
   if (document.getElementById('zip-section').classList.contains('visible')) {
     renderZipChecklist();
   }
+  // Refresh loaded file labels
+  if (getUsersFileLabel) {
+    const el = document.getElementById('fn-users');
+    if (el) el.textContent = getUsersFileLabel();
+  }
+  if (getListFileLabel) {
+    const el = document.getElementById('fn-list');
+    if (el) el.textContent = getListFileLabel();
+  }
   // Re-render dynamic tables if already built
-  if (matchResults.length) updateMatchStats();
+  if (matchResults.length) {
+    refreshMatchReasons();
+    renderMatchTable();
+  }
   if (usersData.length && document.getElementById('section-edit').classList.contains('visible')) {
-    updateEditStats();
-    const cnt = document.getElementById('filter-count');
-    if (cnt && cnt.textContent) filterTable();
+    renderEditTable();
   }
   // Waiting status text
   ['fsi-users-detail','fsi-list-detail','fsi-log-detail'].forEach(id => {
@@ -1203,12 +1242,12 @@ function renderCmdPanel() {
     container.innerHTML = `
       <div class="cmd-block">
         <pre style="white-space:pre-wrap;word-break:break-all">${esc(tmpl.commands[activeCmdTab] || tmpl.commands[0])}</pre>
-        <button class="cmd-copy-btn" onclick="copyCmd(${activeCmdTab})">📋 Copy</button>
+        <button class="cmd-copy-btn" onclick="copyCmd(${activeCmdTab})">📋 ${esc(t('btn_copy'))}</button>
       </div>`;
   }
 
   // Hint text
-  const hintKey = { windows: 'cmd_hint_win', mac: 'cmd_hint_mac', linux: 'cmd_hint_linux', unknown: 'cmd_hint_linux' }[os];
+  const hintKey = { windows: 'cmd_hint_win', mac: 'cmd_hint_mac', linux: 'cmd_hint_linux', unknown: 'cmd_hint_unknown' }[os];
   const hintEl  = document.getElementById('cmd-hint-text');
   if (hintEl) hintEl.textContent = t(hintKey);
 }
@@ -1245,6 +1284,8 @@ let listData     = [];
 let usersHeaders = [];
 let logFiles     = [];
 let matchResults = [];
+let getUsersFileLabel = null;
+let getListFileLabel  = null;
 
 const COL_ID    = 'Source Backlog user id';
 const COL_NAME  = 'Source Backlog user display name';
@@ -1354,8 +1395,13 @@ async function loadCsvFromDir(dirHandle, filename, type) {
           }
           const count = res.data.length;
           setFsiInfo(fsiId, detailId, t('status_ok', count), 'ok');
+          if (type === 'users') {
+            getUsersFileLabel = () => t('file_loaded', filename, count);
+          } else {
+            getListFileLabel = () => t('file_loaded', filename, count);
+          }
           if (document.getElementById(fnId))
-            document.getElementById(fnId).textContent = '✓ ' + filename + '（' + count + '行）';
+            document.getElementById(fnId).textContent = type === 'users' ? getUsersFileLabel() : getListFileLabel();
           if (document.getElementById(dzId))
             document.getElementById(dzId).classList.add('loaded');
           resolve();
@@ -1421,11 +1467,13 @@ function parseCSV(file, type) {
       if (type === 'users') {
         usersData    = sanitizeRows(res.data);
         usersHeaders = res.meta.fields.filter(f => !DANGEROUS_KEYS.has(f));
-        document.getElementById('fn-users').textContent = '✓ ' + file.name + '（' + res.data.length + '行）';
+        getUsersFileLabel = () => t('file_loaded', file.name, res.data.length);
+        document.getElementById('fn-users').textContent = getUsersFileLabel();
         document.getElementById('dz-users')?.classList.add('loaded');
       } else {
         listData = sanitizeRows(res.data);
-        document.getElementById('fn-list').textContent = '✓ ' + file.name + '（' + res.data.length + '行）';
+        getListFileLabel = () => t('file_loaded', file.name, res.data.length);
+        document.getElementById('fn-list').textContent = getListFileLabel();
         document.getElementById('dz-list')?.classList.add('loaded');
       }
       updateNextBtn();
@@ -1451,6 +1499,8 @@ function clearAll() {
   logFiles     = [];
   matchResults = [];
   usersHeaders = [];
+  getUsersFileLabel = null;
+  getListFileLabel  = null;
 
   const fpa = document.getElementById('folder-pick-area');
   fpa.classList.remove('loaded');
@@ -1511,9 +1561,11 @@ function loadSample() {
     { Name: '*tU2vW4xY6z', Email: 'bob.wilson@example.com' },
   ];
 
-  document.getElementById('fn-users').textContent = '✓ users.csv（サンプル 6行）';
+  getUsersFileLabel = () => t('sample_users_loaded', 6);
+  getListFileLabel  = () => t('sample_list_loaded', 6);
+  document.getElementById('fn-users').textContent = getUsersFileLabel();
   document.getElementById('dz-users').classList.add('loaded');
-  document.getElementById('fn-list').textContent = '✓ users_list.csv（サンプル 6件）';
+  document.getElementById('fn-list').textContent = getListFileLabel();
   document.getElementById('dz-list').classList.add('loaded');
   updateNextBtn();
   updateZipSection();
@@ -1645,6 +1697,20 @@ function rejectAll() {
   showToast(t('toast_reject_all'), 'warn');
 }
 
+function refreshMatchReasons() {
+  if (!matchResults.length) return;
+  const emailMap = buildEmailMap();
+  const nameSet  = new Set(listData.map(r => r.Name));
+  matchResults.forEach(m => {
+    if (m.accepted === 'no-match') return;
+    const row      = usersData[m.rowIdx];
+    const srcEmail = (row[COL_EMAIL] || '').trim().toLowerCase();
+    const srcId    = (row[COL_ID] || '').trim();
+    if (srcEmail && emailMap[srcEmail]) m.reason = t('reason_email');
+    else if (srcId && nameSet.has(srcId)) m.reason = t('reason_id');
+  });
+}
+
 function updateMatchStats() {
   const candidates = matchResults.filter(m => m.accepted !== 'no-match');
   const accepted   = candidates.filter(m => m.accepted === true).length;
@@ -1744,9 +1810,7 @@ function refreshDuplicateWarnings() {
     const dest = row[COL_DEST];
     const isDup = dest && counts[dest] > 1;
     warnEl.className = isDup ? 'dup-warn show' : 'dup-warn';
-    warnEl.textContent = isDup
-      ? 'すでに他の行でも選択されています。マッピングで不整合となりエラーとなる可能性があります'
-      : '';
+    warnEl.textContent = isDup ? t('dup_warn') : '';
     if (selEl && dest) {
       selEl.className = 'dest-select' + (isDup ? ' dup' : '');
     }
@@ -1829,7 +1893,7 @@ function renderZipChecklist() {
 
 async function downloadLogZip() {
   if (typeof JSZip === 'undefined') {
-    showToast('JSZip library not loaded', 'warn');
+    showToast(t('toast_jszip_missing'), 'warn');
     return;
   }
 
